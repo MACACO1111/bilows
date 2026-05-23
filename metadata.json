@@ -1,5 +1,5 @@
 {
-  "name": "Bilows",
+  "name": "Criador de Cartas",
   "description": "Crie e pinte seus próprios monstros, atribua habilidades nos 4 reinos (Ar, Água, Fogo, Terra), simule batalhas em turnos e imprima cartas personalizadas em folha A4.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

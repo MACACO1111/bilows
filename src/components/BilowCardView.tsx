@@ -10,6 +10,7 @@ interface BilowCardViewProps {
   onSaveDrawing?: (dataUrl: string) => void;
   canvasElement?: React.ReactNode;
   currentHp?: number;
+  innerStyle?: React.CSSProperties;
 }
 
 // Pixel art retro skull SVG
@@ -118,6 +119,41 @@ export function getDeterministicValue(cardId: string, options: string[], seed: n
   return options[sum % options.length];
 }
 
+// Automatically calculate state and raffle values for the warrior battle behaviors
+export function generateAutomaticBehavior(pesoStr: string) {
+  const peso = parseFloat(pesoStr) || 0;
+  
+  // 1. Roll NUMERO (random from 1 to 6)
+  // If peso is between 1 and 9 (inclusive, i.e., "entre 01 e 09"), add PAR and ÍMPAR to the pool
+  const numberPool = ['1', '2', '3', '4', '5', '6'];
+  if (peso >= 1 && peso <= 9) {
+    numberPool.push('PAR', 'ÍMPAR');
+  }
+  const chosenDado = numberPool[Math.floor(Math.random() * numberPool.length)];
+
+  // 2. Roll ACT ("EU" or "OPONENTE")
+  const actPool = ['EU', 'OPONENTE'];
+  const chosenAct = actPool[Math.floor(Math.random() * actPool.length)];
+
+  // 3. Roll HIT depending on ACT
+  let chosenHit = '';
+  if (chosenAct === 'EU') {
+    // EU options: JOGO NOVAMENTE, DOBRA VALOR DO DADO, QUEBRO DEFESA
+    const euOptions = ['JOGO NOVAMENTE', 'DOBRA VALOR DO DADO', 'QUEBRO DEFESA'];
+    chosenHit = euOptions[Math.floor(Math.random() * euOptions.length)];
+  } else {
+    // OPONENTE options: RECUA A CARTA, MUDA DE REINO
+    const oponenteOptions = ['RECUA A CARTA', 'MUDA DE REINO'];
+    chosenHit = oponenteOptions[Math.floor(Math.random() * oponenteOptions.length)];
+  }
+
+  return {
+    behaviorDado: chosenDado,
+    behaviorAction: chosenAct,
+    behaviorHit: chosenHit
+  };
+}
+
 export default function BilowCardView({ 
   card, 
   scale = 1, 
@@ -125,7 +161,8 @@ export default function BilowCardView({
   isEditing = false,
   onCardChange,
   canvasElement,
-  currentHp
+  currentHp,
+  innerStyle
 }: BilowCardViewProps) {
 
   // Computed visual parameters
@@ -150,7 +187,8 @@ export default function BilowCardView({
     width: '420px', // Robust width for perfect split layout
     background: '#ffffff',
     color: '#000000',
-    fontFamily: 'Arial, sans-serif'
+    fontFamily: 'Arial, sans-serif',
+    ...innerStyle
   };
 
   const textClass = "font-sans-arial text-[9px] uppercase tracking-wider font-bold text-black";
@@ -186,7 +224,7 @@ export default function BilowCardView({
         {/* logo do jogo (letra branca sobre fundo preto) */}
         <div className="w-full flex flex-col items-center mb-1">
           <div className="bg-black text-white px-4 py-1 text-center font-bold tracking-widest text-[9.5px]">
-            BILOWS CLUB
+            BILOW
           </div>
           <div className="w-full border-t border-black/30 my-1" />
         </div>
@@ -199,7 +237,8 @@ export default function BilowCardView({
               <input
                 type="text"
                 maxLength={2}
-                value={card.evoc || '01'}
+                value={card.evoc ?? ''}
+                placeholder="01"
                 onChange={(e) => onCardChange?.({ evoc: e.target.value.replace(/[^0-9]/g, '') })}
                 className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
               />
@@ -216,7 +255,8 @@ export default function BilowCardView({
               <input
                 type="text"
                 maxLength={12}
-                value={card.name || 'SEM NOME'}
+                value={card.name ?? ''}
+                placeholder="SEM NOME"
                 onChange={(e) => onCardChange?.({ name: e.target.value.substring(0, 12).toUpperCase() })}
                 className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
               />
@@ -250,7 +290,7 @@ export default function BilowCardView({
 
         {/* VIDA bar display */}
         <div className="w-full mb-2 flex items-center justify-between border-2 border-black p-1 bg-neutral-100">
-          <span className="text-[8px] font-black text-black">VIDA</span>
+          <span className="text-[13px] font-black text-black">VIDA</span>
           <span className="text-[10px] font-black text-black bg-white border border-black px-1.5 py-0.2 min-w-[20px] text-center">
             {calculatedVid}
           </span>
@@ -298,7 +338,18 @@ export default function BilowCardView({
                     maxLength={4}
                     placeholder="KG"
                     value={card.peso}
-                    onChange={(e) => onCardChange?.({ peso: e.target.value.replace(/[^0-9]/g, '') })}
+                    onChange={(e) => {
+                      const newPeso = e.target.value.replace(/[^0-9]/g, '');
+                      const updates: Partial<BilowCard> = { peso: newPeso };
+                      
+                      // Roll automatically on weight adjustment
+                      const rolled = generateAutomaticBehavior(newPeso);
+                      updates.behaviorDado = rolled.behaviorDado;
+                      updates.behaviorAction = rolled.behaviorAction;
+                      updates.behaviorHit = rolled.behaviorHit;
+
+                      onCardChange?.(updates);
+                    }}
                     className="w-16 border-[1.5px] border-black px-1 py-0.1 text-[10.5px] font-bold text-black text-right bg-white focus:outline-none"
                   />
                 ) : (
@@ -334,7 +385,7 @@ export default function BilowCardView({
 
               {/* Fraco - 2X Row */}
               <div className="flex items-center justify-between">
-                <span className="text-[8.5px] font-black text-black leading-tight max-w-[120px]">SOFRE DANO DOBRADO DO REINO:</span>
+                <span className="text-[8.5px] font-normal text-black leading-tight max-w-[120px]">SOFRE DANO DOBRADO DO REINO:</span>
                 <span className="font-bold text-[10.5px] border-[1.5px] border-black px-1.5 py-0.1 bg-white">
                   {calculatedFraco}
                 </span>
@@ -353,66 +404,73 @@ export default function BilowCardView({
             <div className="mt-2 border-t-[1.5px] border-black/30 pt-1">
               <span className="text-[8.5px] font-black tracking-tight text-black block mb-1">SE MEU DADO DER:</span>
               <div className="space-y-1">
-                {/* Behavior Input 1 (Dado dropdown) */}
+                {/* Behavior Input 1 (Dado dropdown transformed to SPAN with automatic raffle trigger) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[9.5px] text-stone-500 font-bold">NÚMERO:</span>
                   {isEditing ? (
-                    <select
-                      value={card.behaviorDado || 'DADO'}
-                      onChange={(e) => onCardChange?.({ behaviorDado: e.target.value })}
-                      className="border-[1.5px] border-black bg-white text-[11.5px] font-bold text-black px-1 py-0.1 w-24 focus:outline-none"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const peso = parseFloat(card.peso) || 0;
+                        const numberPool = ['1', '2', '3', '4', '5', '6'];
+                        if (peso >= 1 && peso <= 9) {
+                          numberPool.push('PAR', 'ÍMPAR');
+                        }
+                        const chosenDado = numberPool[Math.floor(Math.random() * numberPool.length)];
+                        onCardChange?.({ behaviorDado: chosenDado });
+                      }}
+                      className="border-[1.5px] border-black bg-stone-100 hover:bg-stone-200 active:scale-95 text-[11px] font-bold text-black px-2 py-0.5 rounded leading-none text-center cursor-pointer min-w-[110px]"
+                      title="Sorteia novo número"
                     >
-                      <option value="DADO">NÚMERO</option>
-                      <option value="PAR">PAR</option>
-                      <option value="ÍMPAR">ÍMPAR</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                      <option value="6">6</option>
-                    </select>
+                      {card.behaviorDado || 'DADO'} 🎲
+                    </button>
                   ) : (
-                    <span className="text-[11.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.1 truncate w-24 block text-center">
+                    <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase">
                       {card.behaviorDado === 'DADO' ? 'NÚMERO' : (card.behaviorDado || 'NÚMERO')}
                     </span>
                   )}
                 </div>
 
-                {/* Behavior Input 2 (Action text, max 20) */}
+                {/* Behavior Input 2 (Action text transformed to SPAN with interactive raffle button trigger) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[9.5px] text-stone-500 font-bold">ACT:</span>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      maxLength={20}
-                      value={card.behaviorAction || 'ACTION'}
-                      onChange={(e) => onCardChange?.({ behaviorAction: e.target.value })}
-                      className="border-[1.5px] border-black bg-white text-[10.5px] font-bold text-black px-1 py-0.1 w-28 focus:outline-none"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const actPool = ['EU', 'OPONENTE'];
+                        const chosenAct = actPool[Math.floor(Math.random() * actPool.length)];
+                        let chosenHit = '';
+                        if (chosenAct === 'EU') {
+                          const euOptions = ['JOGO NOVAMENTE', 'DOBRA VALOR DO DADO', 'QUEBRO DEFESA'];
+                          chosenHit = euOptions[Math.floor(Math.random() * euOptions.length)];
+                        } else {
+                          const oponenteOptions = ['RECUA A CARTA', 'MUDA DE REINO'];
+                          chosenHit = oponenteOptions[Math.floor(Math.random() * oponenteOptions.length)];
+                        }
+                        onCardChange?.({
+                          behaviorAction: chosenAct,
+                          behaviorHit: chosenHit
+                        });
+                      }}
+                      className="border-[1.5px] border-black bg-amber-400 hover:bg-amber-500 active:scale-95 text-[10.5px] font-black text-black px-2 py-0.5 rounded leading-none text-center cursor-pointer min-w-[110px] flex items-center justify-center gap-1"
+                      title="Sortear: EU ou OPONENTE"
+                    >
+                      <span className="uppercase text-center w-full">{card.behaviorAction || 'ACTION'} 🎲</span>
+                    </button>
                   ) : (
-                    <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.1 truncate w-28 block text-center">
+                    <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase">
                       {card.behaviorAction || 'ACTION'}
                     </span>
                   )}
                 </div>
 
-                {/* Behavior Input 3 (Hit text, max 20) */}
+                {/* Behavior Input 3 (Hit text transformed to clean read-only SPAN) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[10.5px] text-stone-500 font-bold">HIT:</span>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      maxLength={20}
-                      value={card.behaviorHit || 'HIT'}
-                      onChange={(e) => onCardChange?.({ behaviorHit: e.target.value })}
-                      className="border-[1.5px] border-black bg-white text-[10.5px] font-bold text-black px-1 py-0.1 w-28 focus:outline-none"
-                    />
-                  ) : (
-                    <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.1 truncate w-28 block text-center">
-                      {card.behaviorHit || 'HIT'}
-                    </span>
-                  )}
+                  <span className="text-[10px] font-black border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] max-w-[115px] block text-center leading-[1.1] truncate uppercase" title={card.behaviorHit || 'HIT'}>
+                    {card.behaviorHit || 'HIT'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -444,26 +502,29 @@ export default function BilowCardView({
               </div>
             </div>
 
-            {/* Footer with twitter-handle / creator ID input, max 20 characters pre-printed with @ */}
+            {/* Footer with twitter-handle / creator ID input, max 20 characters */}
             <div className="mt-2.5">
               {isEditing ? (
-                <div className="flex items-center border-2 border-black bg-white px-1 py-0.5">
-                  <span className="text-[9px] font-black text-black select-none">@</span>
+                <div className="flex items-center border-[1.5px] border-black bg-white px-1 py-0.5">
                   <input
                     type="text"
-                    maxLength={20}
-                    value={card.twitterHandle ? card.twitterHandle.replace(/^@/, '') : ''}
+                    maxLength={30}
+                    value={card.twitterHandle || ''}
                     placeholder="NOME DO DESIGNER"
-                    onChange={(e) => {
-                      const cleanInput = e.target.value.replace(/[^A-Za-z0-9_ -]/g, '');
-                      onCardChange?.({ twitterHandle: `@${cleanInput}` });
+                    onFocus={(e) => {
+                      if (card.twitterHandle === 'NOME DO DESIGNER' || card.twitterHandle === 'NOME DO USUARIO') {
+                        onCardChange?.({ twitterHandle: '' });
+                      }
                     }}
-                    className="w-full bg-white text-[9px] font-bold text-black focus:outline-none uppercase"
+                    onChange={(e) => {
+                      onCardChange?.({ twitterHandle: e.target.value });
+                    }}
+                    className="w-full bg-white text-[9px] font-bold text-black focus:outline-none"
                   />
                 </div>
               ) : (
-                <div className="border-2 border-black bg-white text-center py-0.5 text-[9.5px] font-black tracking-wide text-black truncate px-1">
-                  {card.twitterHandle || '@NOME DO DESIGNER'}
+                <div className="border-[1.5px] border-black bg-white text-center py-0.5 text-[9.5px] font-black tracking-wide text-black truncate px-1">
+                  {card.twitterHandle || 'NOME DO DESIGNER'}
                 </div>
               )}
             </div>

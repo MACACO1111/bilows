@@ -46,36 +46,42 @@ import {
 
 // Override fabric.Circle rendering to turn fractional circles with startAngle/endAngle 
 // into solid, closed pizza pie sector shapes (so borders and fills are closed and draw back to the center).
-const originalCircleRender = (fabric.Circle.prototype as any)._render;
-(fabric.Circle.prototype as any)._render = function (ctx: CanvasRenderingContext2D) {
-  const startAngle = this.startAngle ?? 0;
-  const endAngle = this.endAngle ?? 360;
-  const angleSpan = Math.abs(endAngle - startAngle);
+if (!(fabric.Circle.prototype as any).__isOverridden) {
+  const originalCircleRender = (fabric.Circle.prototype as any)._render;
+  (fabric.Circle.prototype as any).__originalRender = originalCircleRender;
+  (fabric.Circle.prototype as any).__isOverridden = true;
 
-  if (angleSpan >= 360) {
-    if (originalCircleRender) {
-      originalCircleRender.call(this, ctx);
+  (fabric.Circle.prototype as any)._render = function (ctx: CanvasRenderingContext2D) {
+    const startAngle = this.startAngle ?? 0;
+    const endAngle = this.endAngle ?? 360;
+    const angleSpan = Math.abs(endAngle - startAngle);
+
+    if (angleSpan >= 360) {
+      const orig = (fabric.Circle.prototype as any).__originalRender;
+      if (orig) {
+        orig.call(this, ctx);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2, false);
+        this._renderPaintInOrder(ctx);
+      }
     } else {
       ctx.beginPath();
-      ctx.arc(0, 0, this.radius, 0, Math.PI * 2, false);
+      ctx.moveTo(0, 0);
+      ctx.arc(
+        0,
+        0,
+        this.radius,
+        fabric.util.degreesToRadians(startAngle),
+        fabric.util.degreesToRadians(endAngle),
+        false
+      );
+      ctx.lineTo(0, 0);
+      ctx.closePath();
       this._renderPaintInOrder(ctx);
     }
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(
-      0,
-      0,
-      this.radius,
-      fabric.util.degreesToRadians(startAngle),
-      fabric.util.degreesToRadians(endAngle),
-      false
-    );
-    ctx.lineTo(0, 0);
-    ctx.closePath();
-    this._renderPaintInOrder(ctx);
-  }
-};
+  };
+}
 
 type Tool = "select" | "rect" | "circle" | "triangle" | "text" | "line" | "draw" | "eraser" | "polyline";
 
@@ -100,7 +106,9 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   onCardChange
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+  const isDisposingRef = useRef(false);
 
   // Helper function to export canvas as base64 PNG
   const getExportDataUrl = useCallback(() => {
@@ -172,7 +180,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
 
   // Trigger reactive updates to parent and local history track
   const saveHistory = useCallback(() => {
-    if (!fabricCanvasRef.current || isHistoryProcessing.current) return;
+    if (!fabricCanvasRef.current || isHistoryProcessing.current || isDisposingRef.current) return;
     const json = JSON.stringify(fabricCanvasRef.current.toObject());
     
     const newHistory = [...historyRef.current.slice(0, historyIndexRef.current + 1), json];
@@ -203,27 +211,58 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
     setActiveTool(tool);
     if (!fabricCanvasRef.current) return;
 
-    fabricCanvasRef.current.isDrawingMode = (tool === 'draw' || tool === 'eraser');
-    fabricCanvasRef.current.selection = tool === 'select';
+    const canvas = fabricCanvasRef.current;
+    canvas.isDrawingMode = (tool === 'draw' || tool === 'eraser');
+    canvas.selection = tool === 'select';
     
     if (tool === 'draw') {
-      fabricCanvasRef.current.freeDrawingBrush = new fabric.PencilBrush(fabricCanvasRef.current);
-      fabricCanvasRef.current.freeDrawingBrush.width = strokeWidth;
-      fabricCanvasRef.current.freeDrawingBrush.color = strokeColor;
+      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+      canvas.freeDrawingBrush.width = strokeWidth;
+      canvas.freeDrawingBrush.color = strokeColor;
     } else if (tool === 'eraser') {
-      fabricCanvasRef.current.freeDrawingBrush = new fabric.PencilBrush(fabricCanvasRef.current);
-      fabricCanvasRef.current.freeDrawingBrush.width = strokeWidth * 4;
-      fabricCanvasRef.current.freeDrawingBrush.globalCompositeOperation = 'destination-out';
+      canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+      canvas.freeDrawingBrush.width = strokeWidth * 4;
+      canvas.freeDrawingBrush.globalCompositeOperation = 'destination-out';
     }
 
     if (tool !== 'polyline') {
-      if (isDrawingPolylineRef.current && tempPolylineObjRef.current && fabricCanvasRef.current) {
-        fabricCanvasRef.current.remove(tempPolylineObjRef.current);
+      if (isDrawingPolylineRef.current && tempPolylineObjRef.current) {
+        finalizePolylineRef.current(false, tool);
+        return;
       }
-      isDrawingPolylineRef.current = false;
-      tempPolylineObjRef.current = null;
-      polylinePointsRef.current = [];
+    } else {
+      if (isDrawingPolylineRef.current && tempPolylineObjRef.current) {
+        finalizePolylineRef.current(false, 'polyline');
+        return;
+      } else {
+        // Guarantee clean state with no stale data from any interrupt
+        isDrawingPolylineRef.current = false;
+        tempPolylineObjRef.current = null;
+        polylinePointsRef.current = [];
+      }
     }
+
+    // Discard any active selection to prevent conflicts when switching out of select mode
+    if (tool !== 'select') {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+
+    // Toggle selectability & event handling of existing objects to prevent click hijacking during active drawing session
+    const isInteractive = (tool === 'select');
+    canvas.forEachObject((obj: any) => {
+      // Don't make the card background template image interactive or selectable under any circumstances
+      if (obj.isCardBackground || obj.type === 'image') {
+        obj.set({ selectable: false, evented: false });
+        return;
+      }
+      obj.set({
+        selectable: isInteractive,
+        evented: isInteractive,
+      });
+    });
+
+    canvas.requestRenderAll();
   }, [strokeColor, strokeWidth]);
 
   const cancelPolyline = useCallback(() => {
@@ -237,30 +276,36 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
     setTool('select');
   }, [setTool]);
 
-  const finalizePolyline = useCallback((forceClosed: boolean = false) => {
+  const finalizePolyline = useCallback((forceClosed: boolean = false, nextTool: Tool = 'select') => {
     if (!isDrawingPolylineRef.current || !tempPolylineObjRef.current || !fabricCanvasRef.current) return;
     
     const pts = [...polylinePointsRef.current];
     if (pts.length > 2) {
       pts.pop(); // remove moving guide point
       
-      if (pts.length > 1) {
-        const last = pts[pts.length - 1];
-        const prev = pts[pts.length - 2];
-        if (Math.abs(last.x - prev.x) < 25 && Math.abs(last.y - prev.y) < 25) {
-          pts.pop();
+      // Filter out duplicate consecutive points (e.g. from rapid double clicking)
+      const cleanPts = [];
+      for (let i = 0; i < pts.length; i++) {
+        if (i === 0) {
+          cleanPts.push(pts[i]);
+        } else {
+          const last = cleanPts[cleanPts.length - 1];
+          const curr = pts[i];
+          if (Math.hypot(curr.x - last.x, curr.y - last.y) >= 4) {
+            cleanPts.push(curr);
+          }
         }
       }
 
-      if (pts.length >= 2) {
+      if (cleanPts.length >= 2) {
         fabricCanvasRef.current.remove(tempPolylineObjRef.current);
         
         // Use explicitly passed forceClosed to determine if it is a closed loop polygon
-        const isClosed = forceClosed && pts.length >= 3;
+        const isClosed = forceClosed && cleanPts.length >= 3;
 
-        const minX = Math.min(...pts.map(p => p.x));
-        const minY = Math.min(...pts.map(p => p.y));
-        const relativePts = pts.map(p => ({ x: p.x - minX, y: p.y - minY }));
+        const minX = Math.min(...cleanPts.map(p => p.x));
+        const minY = Math.min(...cleanPts.map(p => p.y));
+        const relativePts = cleanPts.map(p => ({ x: p.x - minX, y: p.y - minY }));
         
         let finalShape;
         if (isClosed) {
@@ -300,7 +345,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
     
     fabricCanvasRef.current.requestRenderAll();
     saveHistory();
-    setTool('select');
+    setTool(nextTool);
   }, [saveHistory, setTool]);
 
   const finalizePolylineRef = useRef(finalizePolyline);
@@ -324,21 +369,36 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   };
 
   useEffect(() => {
-    if (!canvasRef.current || fabricCanvasRef.current) return;
+    if (!canvasRef.current) return;
 
     const isCardMode = !!card;
     const canvasWidth = isCardMode ? 400 : 1000;
     const canvasHeight = isCardMode ? 245 : 400;
 
+    const canvasEl = canvasRef.current;
+
     // Use transparent background for high quality drawing overlays on card
-    const canvas = new fabric.Canvas(canvasRef.current, {
+    const canvas = new fabric.Canvas(canvasEl, {
       width: canvasWidth,
       height: canvasHeight,
       backgroundColor: "transparent",
       preserveObjectStacking: true,
+      fireRightClick: true,
+      stopContextMenu: true,
     });
 
     fabricCanvasRef.current = canvas;
+
+    // Native dblclick handler for total resilience on empty space/transparent cards
+    if (canvas.upperCanvasEl) {
+      canvas.upperCanvasEl.addEventListener("dblclick", (e) => {
+        if (activeToolRef.current === "polyline" && isDrawingPolylineRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          finalizePolylineRef.current();
+        }
+      });
+    }
 
     // Load initial background/illustration image if edited card exists exactly once
     const initialUrl = initialDataUrlRef.current;
@@ -356,6 +416,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
           selectable: false,
           evented: false,
         });
+        (img as any).isCardBackground = true;
         canvas.add(img);
         canvas.sendObjectToBack(img);
         canvas.renderAll();
@@ -430,16 +491,30 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
 
     canvas.on("mouse:down", (opt) => {
       if (activeToolRef.current !== "polyline") return;
+
+      // Handle right-click to immediately finalize polyline
+      const ev = opt.e as any;
+      const isRightClick = (opt as any).button === 3 || (ev && (ev.button === 2 || ev.which === 3 || ev.buttons === 2));
+      if (isRightClick) {
+        if (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        if (isDrawingPolylineRef.current) {
+          finalizePolylineRef.current();
+        }
+        return;
+      }
       
       const pointer = canvas.getScenePoint(opt.e);
       const x = pointer.x;
       const y = pointer.y;
 
-      if (!isDrawingPolylineRef.current) {
+      if (!isDrawingPolylineRef.current || !polylinePointsRef.current || polylinePointsRef.current.length < 2 || !tempPolylineObjRef.current) {
         isDrawingPolylineRef.current = true;
         polylinePointsRef.current = [{ x, y }, { x, y }];
         
-        const poly = new fabric.Polyline(polylinePointsRef.current, {
+        const poly = new fabric.Polyline([{ x, y }, { x, y }], {
           stroke: strokeColorRef.current,
           strokeWidth: strokeWidthRef.current,
           fill: fillColorRef.current === 'transparent' ? 'transparent' : fillColorRef.current,
@@ -452,10 +527,10 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
         tempPolylineObjRef.current = poly;
       } else {
         const pts = [...polylinePointsRef.current];
-        const firstPt = pts[0];
+        const firstPt = pts[0] || { x, y };
         const distToStart = Math.hypot(x - firstPt.x, y - firstPt.y);
 
-        if (distToStart < 15 && pts.length >= 3) {
+        if (distToStart < 20 && pts.length >= 3) {
           // Close the figure by snapping the last point to the start point and finalizing
           pts[pts.length - 1] = { x: firstPt.x, y: firstPt.y };
           polylinePointsRef.current = pts;
@@ -463,27 +538,46 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
           return;
         }
 
+        // Tap or click on the same spot as the last vertex to finalize drawing
+        if (pts.length >= 3) {
+          const lastPlaced = pts[pts.length - 2];
+          if (lastPlaced) {
+            const distToLast = Math.hypot(x - lastPlaced.x, y - lastPlaced.y);
+            if (distToLast < 10) {
+              finalizePolylineRef.current();
+              return;
+            }
+          }
+        }
+
         pts[pts.length - 1] = { x, y };
         pts.push({ x, y });
         polylinePointsRef.current = pts;
         
-        tempPolylineObjRef.current?.set({ points: pts });
+        if (tempPolylineObjRef.current) {
+          tempPolylineObjRef.current.set({ points: pts });
+          tempPolylineObjRef.current.dirty = true;
+          tempPolylineObjRef.current.setCoords();
+        }
         canvas.requestRenderAll();
       }
     });
 
     canvas.on("mouse:move", (opt) => {
-      if (activeToolRef.current !== "polyline" || !isDrawingPolylineRef.current) return;
+      if (activeToolRef.current !== "polyline" || !isDrawingPolylineRef.current || !tempPolylineObjRef.current) return;
       
       const pointer = canvas.getScenePoint(opt.e);
       const x = pointer.x;
       const y = pointer.y;
       
       const pts = [...polylinePointsRef.current];
-      if (pts.length > 0) {
+      if (pts.length >= 2) {
         pts[pts.length - 1] = { x, y };
         polylinePointsRef.current = pts;
-        tempPolylineObjRef.current?.set({ points: pts });
+        
+        tempPolylineObjRef.current.set({ points: pts });
+        tempPolylineObjRef.current.dirty = true;
+        tempPolylineObjRef.current.setCoords();
         canvas.requestRenderAll();
       }
     });
@@ -543,35 +637,54 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-
     const handleWindowMouseUp = (e: MouseEvent | TouchEvent) => {
-      if (canvas) {
-        try {
-          // Tell fabric that mouse is up to prevent stickiness / dragging outside canvas
-          const fabricCanvas = canvas as any;
-          if (typeof fabricCanvas._onMouseUp === 'function') {
-            fabricCanvas._onMouseUp(e);
-          }
-          // Reset dragging/mousedown internal states
-          if ('_isMouseDown' in fabricCanvas) {
-            fabricCanvas._isMouseDown = false;
-          }
-        } catch (err) {
-          // ignore any errors
+      try {
+        const fc = canvas as any;
+        const target = e.target as HTMLElement | null;
+        if (target && (target.closest('.canvas-container') || target === canvasEl)) {
+          return;
         }
+        if (typeof fc._onMouseUp === 'function') fc._onMouseUp(e);
+        if (typeof fc.onMouseUp === 'function') fc.onMouseUp(e);
+        if (fc.pointerHandler && typeof fc.pointerHandler.onMouseUp === 'function') {
+          fc.pointerHandler.onMouseUp(e);
+        }
+      } catch (err) {
+        // ignore errors
       }
     };
 
     window.addEventListener('mouseup', handleWindowMouseUp);
     window.addEventListener('touchend', handleWindowMouseUp);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      isDisposingRef.current = true;
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('mouseup', handleWindowMouseUp);
       window.removeEventListener('touchend', handleWindowMouseUp);
-      canvas.dispose();
+      
+      // Unbind all events BEFORE disposing to prevent lifecycle loop
+      canvas.off();
+      canvas.dispose().then(() => {
+        // Disposed canvas successfully
+      }).catch(err => {
+        console.error("Disposal error ignored on unmount", err);
+      });
       fabricCanvasRef.current = null;
+
+      // Synchronously unwrap the canvas element from .canvas-container wrapper 
+      // to resolve any async dispose race condition under React Strict Mode
+      if (canvasEl) {
+        const wrapper = canvasEl.parentNode;
+        if (wrapper && (wrapper as HTMLElement).classList.contains('canvas-container')) {
+          const container = wrapper.parentNode;
+          if (container) {
+            container.insertBefore(canvasEl, wrapper);
+            container.removeChild(wrapper);
+          }
+        }
+      }
     };
   }, []);
 
@@ -966,7 +1079,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   return (
     <div className="flex flex-col items-center bg-[#1e293b] w-full max-w-4xl min-h-[520px] rounded-3xl overflow-hidden border border-white/10 select-none text-gray-800">
       {/* PROFESSIONAL TOOLBAR */}
-      <div className="w-full bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center gap-2 shadow-sm sticky top-0 z-20 text-gray-850">
+      <div style={{ marginTop: '-16px' }} className="w-full bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center gap-2 shadow-sm sticky top-0 z-20 text-gray-850">
         <div className="flex items-center space-x-1 border-r pr-2 shadow-[inset_-1px_0_0_0_#eee]">
           <ToolButton 
             active={activeTool === 'select'} 
@@ -1223,8 +1336,9 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
               card={card}
               isEditing={isEditing}
               onCardChange={onCardChange}
+              innerStyle={{ marginTop: '-22px', marginLeft: '0px' }}
               canvasElement={
-                <div className="relative w-[400px] h-[245px] overflow-hidden">
+                <div ref={containerRef} className="relative w-[400px] h-[245px] overflow-hidden">
                   {/* Subtle Grid Background */}
                   <div className="absolute inset-0 pointer-events-none opacity-[0.05]" 
                        style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>
@@ -1234,7 +1348,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
             />
           </div>
         ) : (
-          <div className="bg-[#1e293b] shadow-2xl border border-white/10 relative inline-block rounded-xl overflow-hidden">
+          <div ref={containerRef} className="bg-[#1e293b] shadow-2xl border border-white/10 relative inline-block rounded-xl overflow-hidden min-w-[400px] min-h-[245px]">
             {/* Grid Background */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.1]" 
                  style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>

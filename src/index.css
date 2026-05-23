@@ -3,11 +3,16 @@
 
 @theme {
   --font-sans: Arial, Helvetica, sans-serif;
-  --font-display: "Space Grotesk", Arial, sans-serif;
-  --font-mono: Courier, monospace;
+  --font-display: Arial, Helvetica, sans-serif;
+  --font-mono: Arial, Helvetica, sans-serif;
 }
 
-/* Force Arial Size 9 and Uppercase by default on non-titles */
+/* Force Arial and Uppercase by default on all elements */
+* {
+  font-family: Arial, Helvetica, sans-serif !important;
+  text-transform: uppercase !important;
+}
+
 body {
   background-color: #2563eb !important;
   color: #ffffff !important;
@@ -56,6 +61,13 @@ input[type="range"] {
     color: #000000 !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+}
+
+/* Hide print-only wrappers during standard screen rendering */
+@media screen {
+  .print-only {
+    display: none !important;
   }
 }
 

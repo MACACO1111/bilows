@@ -27,10 +27,12 @@ import {
 const LOCAL_STORAGE_KEY = 'bilows_deck_collection_v2';
 
 export default function App() {
+  const drawingBoardRef = React.useRef<any>(null);
   const [deck, setDeck] = useState<BilowCard[]>([]);
   const [activeTab, setActiveTab] = useState<'desktop' | 'deck' | 'print' | 'rules' | 'invite' | 'chat'>('desktop');
   
   // Custom Card State in active edit workspace
+  const [draftCardId, setDraftCardId] = useState(() => `bilow-draft-${Date.now()}`);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [cardName, setCardName] = useState('IGNISAUR');
   const [cardEvoc, setCardEvoc] = useState('01');
@@ -42,7 +44,8 @@ export default function App() {
   const [behaviorDado, setBehaviorDado] = useState('DADO');
   const [behaviorAction, setBehaviorAction] = useState('ACTION');
   const [behaviorHit, setBehaviorHit] = useState('HIT');
-  const [twitterHandle, setTwitterHandle] = useState('@NOME DO DESIGNER');
+  const [twitterHandle, setTwitterHandle] = useState('NOME DO DESIGNER');
+  const [exportCard, setExportCard] = useState<BilowCard | null>(null);
 
   // Copy success feedback state
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -101,6 +104,7 @@ export default function App() {
 
   const handleResetForm = () => {
     setEditingCardId(null);
+    setDraftCardId(`bilow-draft-${Date.now()}`);
     setCardName('CRIATURA_NOVA');
     setCardEvoc('01');
     setCardElemento('FO');
@@ -108,12 +112,12 @@ export default function App() {
     setBehaviorDado('DADO');
     setBehaviorAction('ACTION');
     setBehaviorHit('HIT');
-    setTwitterHandle('@CRIADOR');
+    setTwitterHandle('CRIADOR');
     setDrawingDataUrl('');
   };
 
   // Convert current form states to a card object
-  const getCurrentCardObject = (): BilowCard => {
+  const getCurrentCardObject = (customDrawingDataUrl?: string): BilowCard => {
     const calculatedVid = calculateVida(cardPeso);
     const calculatedAtkMod = calculatePowerAtakMod(cardPeso);
     const calculatedDef = calculateDefesa(cardPeso);
@@ -121,9 +125,9 @@ export default function App() {
     const calculatedFraco = calculateFraco(cardElemento);
 
     return {
-      id: editingCardId || `bilow-${Date.now()}`,
+      id: editingCardId || draftCardId,
       name: cardName.substring(0, 12).toUpperCase(),
-      evoc: cardEvoc.replace(/[^0-9]/g, '').substring(0, 2) || '01',
+      evoc: cardEvoc.replace(/[^0-9]/g, '').substring(0, 2),
       elemento: cardElemento,
       vida: calculatedVid,
       peso: cardPeso,
@@ -134,10 +138,10 @@ export default function App() {
       fraco: calculatedFraco,
       recuar: 'AR', // assigned deterministically in view 
       behaviorDado,
-      behaviorAction: behaviorAction.substring(0, 20).toUpperCase() || 'ACTION',
-      behaviorHit: behaviorHit.substring(0, 20).toUpperCase() || 'HIT',
-      twitterHandle: twitterHandle.substring(0, 20).toUpperCase() || '@NOME DO DESIGNER',
-      drawingDataUrl,
+      behaviorAction: behaviorAction.substring(0, 20).toUpperCase(),
+      behaviorHit: behaviorHit.substring(0, 20).toUpperCase(),
+      twitterHandle: twitterHandle.substring(0, 30),
+      drawingDataUrl: customDrawingDataUrl !== undefined ? customDrawingDataUrl : drawingDataUrl,
       createdAt: Date.now()
     };
   };
@@ -148,7 +152,16 @@ export default function App() {
       return;
     }
 
-    const newCard = getCurrentCardObject();
+    // Force synchronous canvas export to get the most up-to-the-millisecond drawing
+    let finalDrawing = drawingDataUrl;
+    if (drawingBoardRef.current && typeof drawingBoardRef.current.exportToImage === 'function') {
+      const exported = drawingBoardRef.current.exportToImage();
+      if (exported) {
+        finalDrawing = exported;
+      }
+    }
+
+    const newCard = getCurrentCardObject(finalDrawing);
     let nextDeck: BilowCard[] = [];
 
     if (editingCardId) {
@@ -162,7 +175,11 @@ export default function App() {
     }
 
     saveDeck(nextDeck);
+    
+    // Persist drawingDataUrl in local state to ensure it matches
+    setDrawingDataUrl(finalDrawing);
     setEditingCardId(newCard.id);
+    setActiveTab('deck'); // Redireciona o criador para a página 'MEU BARALHO' para validação visual imediata
     alert(`SUCESSO! CRIATURA "${newCard.name}" SALVA NO BARALHO.`);
   };
 
@@ -185,7 +202,7 @@ export default function App() {
     setBehaviorDado(card.behaviorDado || 'DADO');
     setBehaviorAction(card.behaviorAction || 'ACTION');
     setBehaviorHit(card.behaviorHit || 'HIT');
-    setTwitterHandle(card.twitterHandle || '@NOME DO DESIGNER');
+    setTwitterHandle(card.twitterHandle || 'NOME DO DESIGNER');
     setDrawingDataUrl(card.drawingDataUrl || '');
     setActiveTab('desktop');
   };
@@ -213,13 +230,104 @@ export default function App() {
     link.click();
   };
 
+  const handleDownloadSingleCard = async () => {
+    // Force synchronous canvas export to get the most up-to-the-millisecond drawing
+    let finalDrawing = drawingDataUrl;
+    if (drawingBoardRef.current && typeof drawingBoardRef.current.exportToImage === 'function') {
+      const exported = drawingBoardRef.current.exportToImage();
+      if (exported) {
+        finalDrawing = exported;
+      }
+    }
+    const card = getCurrentCardObject(finalDrawing);
+
+    setExportCard(card);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const element = document.getElementById("clean-image-export-target");
+    if (element) {
+      try {
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(element, {
+          quality: 0.98,
+          backgroundColor: '#ffffff',
+          pixelRatio: 2 // Use double pixel density for 100% sharp text on all viewing/printing systems (840x1240px)
+        });
+        const link = document.createElement('a');
+        link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.jpeg`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error("Erro ao gerar JPEG, usando fallback de JSON de segurança:", err);
+        // Fallback JSON backup
+        const dataStr = JSON.stringify(card, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+        const link = document.createElement('a');
+        link.href = dataUri;
+        link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+        link.click();
+      }
+    } else {
+      // Fallback JSON backup
+      const dataStr = JSON.stringify(card, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const link = document.createElement('a');
+      link.href = dataUri;
+      link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+      link.click();
+    }
+    setExportCard(null);
+  };
+
+  const handleDownloadSpecificCard = async (card: BilowCard) => {
+    setExportCard(card);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const element = document.getElementById("clean-image-export-target");
+    if (element) {
+      try {
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(element, {
+          quality: 0.98,
+          backgroundColor: '#ffffff',
+          pixelRatio: 2 // Use double pixel density for 100% sharp text on all viewing/printing systems (840x1240px)
+        });
+        const link = document.createElement('a');
+        link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.jpeg`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error("Erro ao gerar JPEG:", err);
+        // Fallback JSON backup
+        const dataStr = JSON.stringify(card, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+        const link = document.createElement('a');
+        link.href = dataUri;
+        link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+        link.click();
+      }
+    } else {
+      // Fallback JSON backup
+      const dataStr = JSON.stringify(card, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const link = document.createElement('a');
+      link.href = dataUri;
+      link.download = `bilow_carta_${card.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+      link.click();
+    }
+    setExportCard(null);
+  };
+
   const handleImportDeck = (e: React.ChangeEvent<HTMLInputElement>) => {
     const reader = new FileReader();
     if (e.target.files && e.target.files[0]) {
       reader.readAsText(e.target.files[0], "UTF-8");
       reader.onload = (event) => {
         try {
-          const parsed = JSON.parse(event.target?.result as string);
+          let parsed = JSON.parse(event.target?.result as string);
+          if (parsed && !Array.isArray(parsed) && typeof parsed === 'object' && parsed.id && parsed.name) {
+            parsed = [parsed];
+          }
           if (Array.isArray(parsed) && parsed.length > 0) {
             const merged = [...parsed, ...deck.filter(d => !parsed.some((p: any) => p.id === d.id))];
             saveDeck(merged);
@@ -268,21 +376,14 @@ export default function App() {
     <div className="min-h-screen bg-[#2563eb] text-[#ffffff] flex flex-col font-mono uppercase tracking-wider text-[9px]">
       
       {/* 2px Solid White outlined retro main navbar header (No print) */}
-      <header className="no-print border-b-2 border-white bg-black">
+      <header className="no-print border-b-2 border-white bg-orange-600">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-white text-black p-1.5 font-black text-xs border border-white">
-              <span className="font-display text-[15px] font-black tracking-widest leading-none">BC</span>
-            </div>
             <div>
               {/* Special Game Title: can be a fancy-title under custom rule */}
               <h1 className="text-xl font-black tracking-widest text-[#ffffff] font-display flex items-baseline gap-2 leading-none">
-                BILOWS TRADING CARDS
-                <span className="text-[7.5px] border border-white bg-white text-black px-1.5 py-0.2 tracking-widest font-mono uppercase">V2.0</span>
+                CRIADOR DE CARTAS
               </h1>
-              <p className="text-[7.5px] text-zinc-400 mt-1">
-                OFICINA ANALÓGICA / CAIXA ALTA ARIAL TAMANHO 9 / TUDO EM PRETO
-              </p>
             </div>
           </div>
 
@@ -291,19 +392,21 @@ export default function App() {
             <button
               id="nav-desktop-btn"
               onClick={() => setActiveTab('desktop')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'desktop' ? 'bg-white text-black border-white' : 'border-black text-zinc-400 hover:text-white'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'desktop' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'desktop' ? '#000000' : '#ffffff' }}
             >
-              DESKTOP
+              CRIAR CARTA
             </button>
 
             <button
               id="nav-deck-btn"
               onClick={() => setActiveTab('deck')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'deck' ? 'bg-white text-black border-white' : 'border-black text-zinc-400 hover:text-white'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'deck' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'deck' ? '#000000' : '#ffffff' }}
             >
               MEU BARALHO
             </button>
@@ -311,9 +414,10 @@ export default function App() {
             <button
               id="nav-print-btn"
               onClick={() => setActiveTab('print')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'print' ? 'bg-white text-black border-white' : 'border-black text-zinc-400 hover:text-white'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'print' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'print' ? '#000000' : '#ffffff' }}
             >
               IMPRIMIR
             </button>
@@ -321,9 +425,10 @@ export default function App() {
             <button
               id="nav-rules-btn"
               onClick={() => setActiveTab('rules')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'rules' ? 'bg-white text-black border-white' : 'border-black text-zinc-400 hover:text-white'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'rules' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'rules' ? '#000000' : '#ffffff' }}
             >
               REGRAS
             </button>
@@ -331,19 +436,21 @@ export default function App() {
             <button
               id="nav-invite-btn"
               onClick={() => setActiveTab('invite')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'invite' ? 'bg-white text-black border-white' : 'border-black text-zinc-400 hover:text-white'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'invite' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'invite' ? '#000000' : '#ffffff' }}
             >
-              CONVIDAR
+              JOGAR ON LINE
             </button>
 
             <button
               id="nav-chat-btn"
               onClick={() => setActiveTab('chat')}
-              className={`px-3 py-2 font-bold transition-all border cursor-pointer ${
-                activeTab === 'chat' ? 'bg-white text-black border-white' : 'border-black text-[#ffffff]'
+              className={`px-3 py-2 transition-all border cursor-pointer ${
+                activeTab === 'chat' ? 'bg-white text-black border-white' : 'border-black hover:text-white'
               }`}
+              style={{ fontFamily: 'Arial', fontWeight: 'bold', fontSize: '10px', color: activeTab === 'chat' ? '#000000' : '#ffffff' }}
             >
               CAIXA DE MENSAGEM
             </button>
@@ -361,23 +468,33 @@ export default function App() {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
               
               {/* ACTIVE EDITING CARD LAYOUT AND DRAWING BOARD (Left 8 columns) */}
-              <div className="xl:col-span-8 w-full min-w-0 flex flex-col gap-4 bg-zinc-950 p-6 border-2 border-zinc-800 rounded-3xl overflow-hidden">
+              <div 
+                style={{ marginTop: '-21px' }}
+                className="xl:col-span-8 w-full min-w-0 flex flex-col gap-4 bg-zinc-950 p-6 border-2 border-zinc-800 rounded-3xl overflow-hidden"
+              >
                 
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/60 w-full">
-                  <div>
-                    <span className="text-zinc-500 font-extrabold text-[8px] tracking-widest block uppercase">OFICINA CARD CREATOR PRO</span>
-                    <h2 className="text-xs font-black text-white uppercase mt-0.5">Editor de Card-Paisagem Real-Time</h2>
-                  </div>
+                  <div></div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
                     <button
                       onClick={handleSaveCard}
+                      style={{ marginTop: '-23px' }}
                       className="px-4 py-2 bg-white text-black text-[9px] font-black uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer"
                     >
-                      {editingCardId ? 'ATUALIZAR CARTA 💾' : 'SALVAR CARTA 💾'}
+                      {editingCardId ? 'REGISTRAR ALTERAÇÕES 💾' : 'REGISTRAR CARTA 💾'}
+                    </button>
+                    <button
+                      onClick={handleDownloadSingleCard}
+                      style={{ marginTop: '-26px' }}
+                      className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                      title="Salvar esta carta no computador"
+                    >
+                      SALVAR 📥
                     </button>
                     {editingCardId && (
                       <button
                         onClick={handleResetForm}
+                        style={{ marginTop: '-24px' }}
                         className="px-3 py-2 bg-zinc-900 border border-zinc-800 hover:border-white text-white text-[9px] font-black uppercase cursor-pointer"
                         title="NOVO PERSONAGEM"
                       >
@@ -387,16 +504,18 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleRandomizePreset}
-                      className="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-amber-400 text-[9px] font-black uppercase cursor-pointer animate-pulse"
+                      style={!editingCardId ? { marginTop: '-24px' } : undefined}
+                      className="px-3 py-2 bg-white border border-white hover:bg-zinc-200 text-black text-[9px] font-black uppercase cursor-pointer transition-colors"
                       title="Presets Aleatórios"
                     >
-                      GERAR PRESET 🪄
+                      GERAR ALEATÓRIO 🪄
                     </button>
                   </div>
                 </div>
 
                 <div className="w-full">
                   <DrawingBoard 
+                    ref={drawingBoardRef}
                     key={editingCardId || 'new-canvas-board'}
                     initialDataUrl={drawingDataUrl}
                     onSaveImage={(url) => setDrawingDataUrl(url)}
@@ -407,7 +526,13 @@ export default function App() {
                       if (updates.name !== undefined) setCardName(updates.name);
                       if (updates.evoc !== undefined) setCardEvoc(updates.evoc);
                       if (updates.elemento !== undefined) setCardElemento(updates.elemento);
-                      if (updates.peso !== undefined) setCardPeso(updates.peso);
+                      
+                      let finalPeso = cardPeso;
+                      if (updates.peso !== undefined) {
+                        setCardPeso(updates.peso);
+                        finalPeso = updates.peso;
+                      }
+
                       if (updates.behaviorDado !== undefined) setBehaviorDado(updates.behaviorDado);
                       if (updates.behaviorAction !== undefined) setBehaviorAction(updates.behaviorAction);
                       if (updates.behaviorHit !== undefined) setBehaviorHit(updates.behaviorHit);
@@ -419,10 +544,10 @@ export default function App() {
               </div>
 
               {/* SAVED DECK CARDS (Right 4 columns) */}
-              <div className="xl:col-span-4 bg-zinc-950 p-4 border-2 border-zinc-800 rounded-3xl flex flex-col gap-4 relative z-20">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <div className="xl:col-span-4 bg-orange-600 p-4 border-2 border-white rounded-3xl flex flex-col gap-4 relative z-20 text-white">
+                <div className="flex items-center justify-between border-b border-white/40 pb-2">
                   <div>
-                    <span className="text-zinc-500 block text-[8px]">LISTA ANALÓGICA</span>
+                    <span className="text-orange-100 block text-[8px]">LISTA ANALÓGICA</span>
                     <h3 className="text-xs font-black text-white">SEU BARALHO ({deck.length})</h3>
                   </div>
                   <div className="flex gap-1">
@@ -514,22 +639,31 @@ export default function App() {
           <div className="no-print space-y-6 animate-fadeIn">
             
             {/* Binder Header Statistics Panel */}
-            <div className="bg-zinc-950 p-6 border-2 border-zinc-800 rounded-3xl flex flex-col md:flex-row items-stretch justify-between gap-6">
+            <div 
+              style={{ height: '94px', marginTop: '-24px' }} 
+              className="bg-zinc-950 p-6 border-2 border-zinc-800 rounded-3xl flex flex-col md:flex-row items-stretch justify-between gap-6"
+            >
               <div className="space-y-2">
-                <span className="text-zinc-500 font-extrabold text-[8px] tracking-widest block uppercase">DECK MANAGER & STORAGE</span>
+                <span 
+                  style={{ marginTop: '-13px' }} 
+                  className="text-zinc-500 font-extrabold text-[8px] tracking-widest block uppercase"
+                >
+                  DECK MANAGER & STORAGE
+                </span>
                 <h2 className="text-sm font-black text-white uppercase flex items-center gap-2">
                   <Layers className="w-4 h-4 text-emerald-400" /> MEU BARALHO ANALÓGICO ({deck.length} / 36)
                 </h2>
-                <p className="text-zinc-400 text-[8.5px] max-w-2xl leading-relaxed">
-                  BEM-VINDO À SUA PASTA CLASSIFICADORA PESSOAL. AQUI VOCÊ ARMAZENA, GERENCIA, CLONA E EXCLUI AS SUAS CRIATURAS ELEMENTAIS. CADA CRIADOR PODERÁ ARMAZENAR NO MÁXIMO UM TOTAL DE 36 CARTAS EM SUA ESTANTE.
-                </p>
+
               </div>
 
               {/* Stats bento indicators */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 shrink-0">
                 
                 {/* Meter Slot representation */}
-                <div className="border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl">
+                <div 
+                  style={{ marginTop: '-16px' }} 
+                  className="border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl"
+                >
                   <span className="text-zinc-500 text-[7.5px] font-bold block mb-1">MEDIDOR DE CAPACIDADE</span>
                   <div className="flex flex-col gap-1.5 flex-grow justify-center">
                     <span className="text-xs font-black text-white">{deck.length} / 36</span>
@@ -543,7 +677,10 @@ export default function App() {
                 </div>
 
                 {/* Avg Weight */}
-                <div className="border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl">
+                <div 
+                  style={{ marginTop: '-16px' }} 
+                  className="border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl"
+                >
                   <span className="text-zinc-500 text-[7.5px] font-bold block mb-1">PESO MÉDIO DO DECK</span>
                   <div className="flex flex-col gap-1 flex-grow justify-center">
                     <span className="text-xs font-black text-amber-400">
@@ -554,8 +691,11 @@ export default function App() {
                 </div>
 
                 {/* Elements distribution breakdown */}
-                <div className="col-span-2 md:col-span-1 border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl">
-                  <span className="text-zinc-500 text-[7.5px] font-bold block mb-1">DISTRIBUIÇÃO ELEMENTAL</span>
+                <div 
+                  style={{ marginTop: '-16px' }} 
+                  className="col-span-2 md:col-span-1 border border-zinc-850 p-3 bg-zinc-900/40 flex flex-col justify-between rounded-xl"
+                >
+                  <span className="text-[#eaeaf5] text-[11.5px] font-[Arial] font-bold block mb-1">DISTRIBUIÇÃO ELEMENTAL</span>
                   <div className="grid grid-cols-4 gap-1 text-center font-bold text-[8px] text-white flex-grow items-center">
                     <div className="bg-red-950/40 border border-red-900/50 p-0.5 rounded text-red-400">FO:{deck.filter(c => c.elemento === 'FO').length}</div>
                     <div className="bg-blue-950/40 border border-blue-900/50 p-0.5 rounded text-blue-400">AG:{deck.filter(c => c.elemento === 'AG').length}</div>
@@ -568,7 +708,10 @@ export default function App() {
             </div>
 
             {/* Import & Export controls */}
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-black border border-zinc-850 p-3 px-4 rounded-xl gap-2">
+            <div 
+              style={{ marginTop: '-19px' }} 
+              className="flex flex-col sm:flex-row justify-between items-center bg-black border border-zinc-850 p-3 px-4 rounded-xl gap-2"
+            >
               <span className="text-[8px] text-zinc-500 font-bold">ORGANIZADOR DE BARALHO INSTANTÂNEO</span>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -596,7 +739,8 @@ export default function App() {
                   return (
                     <div 
                       key={card.id}
-                      className="border-2 border-zinc-800 bg-black p-4 rounded-3xl flex flex-col items-center gap-3 hover:border-zinc-500 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
+                      style={(index === 0 || index === 1 || index === 2) ? { marginTop: '-18px' } : undefined}
+                      className="group/slot relative border-2 border-zinc-800 bg-black p-4 rounded-3xl flex flex-col items-center gap-3 hover:border-zinc-500 transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] hover:z-30"
                     >
                       {/* Slot Header toolbar */}
                       <div className="flex items-center justify-between w-full border-b border-zinc-800 pb-2">
@@ -604,12 +748,19 @@ export default function App() {
                           SLOT #{slotNum}
                         </span>
                         
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 relative z-20">
                           <button
                             onClick={() => handleLoadCard(card)}
                             className="bg-white text-black font-extrabold text-[7.5px] px-1.5 py-0.5 hover:bg-zinc-300 duration-155 uppercase cursor-pointer"
                           >
                             EDITAR
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSpecificCard(card)}
+                            className="bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white font-extrabold text-[7.5px] px-1.5 py-0.5 uppercase cursor-pointer"
+                            title="SALVAR NO COMPUTADOR"
+                          >
+                            SALVAR
                           </button>
                           <button
                             onClick={() => handleDuplicateCard(card)}
@@ -629,9 +780,9 @@ export default function App() {
                       </div>
 
                       {/* Display scaled down card miniature */}
-                      <div className="bg-zinc-950 p-2 border border-zinc-900 rounded-2xl flex justify-center items-center overflow-hidden w-full h-[325px]">
-                        <div className="scale-[0.5] origin-center shrink-0">
-                          <BilowCardView card={card} />
+                      <div className="group/card relative bg-zinc-950 p-2 border border-zinc-900 rounded-2xl flex justify-center items-center w-full h-[325px] overflow-hidden hover:overflow-visible hover:z-45 transition-all duration-300">
+                        <div className="scale-[0.5] group-hover/card:scale-[0.85] origin-center shrink-0 transition-transform duration-300 ease-out group-hover/card:drop-shadow-[0_25px_50px_rgba(0,0,0,0.9)]">
+                           <BilowCardView card={card} />
                         </div>
                       </div>
 
@@ -651,6 +802,7 @@ export default function App() {
                         handleResetForm();
                         setActiveTab('desktop');
                       }}
+                      style={(index === 0 || index === 1 || index === 2) ? { marginTop: '-18px' } : undefined}
                       className="border-2 border-dashed border-zinc-850 bg-zinc-950/40 p-6 h-[410px] rounded-3xl flex flex-col items-center justify-center text-center gap-4 hover:border-zinc-700 hover:bg-zinc-900/20 cursor-pointer group transition-all"
                     >
                       <div className="bg-zinc-900 text-zinc-500 font-extrabold px-1.5 py-0.5 rounded text-[7.5px]">
@@ -1082,12 +1234,31 @@ export default function App() {
           </div>
         )}
 
+        {/* Off-screen export container to render static cards at high quality without interactive elements or hover states */}
+        {exportCard && (
+          <div 
+            style={{ 
+              position: 'absolute', 
+              top: '-9999px', 
+              left: '-9999px', 
+              width: '420px', 
+              height: '620px',
+              overflow: 'hidden',
+              backgroundColor: '#ffffff'
+            }}
+          >
+            <div id="clean-image-export-target" className="bg-white" style={{ width: '420px', height: '620px' }}>
+              <BilowCardView card={exportCard} scale={1} showCutGuides={false} />
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* FOOTER NO-PRINT (Fully Black) */}
       <footer className="no-print mt-auto border-t-2 border-white bg-black py-5 text-center text-[7.5px] text-zinc-500 uppercase">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-2">
-          <p>© 2026 BILOWS CLUB. CRIAÇÕES DE CARDS TOTALMENTE REGULADAS E PARÂMETROS EM ARIAL TAMANHO 9.</p>
+          <p>© 2026 BILOW. CRIAÇÕES DE CARDS TOTALMENTE REGULADAS E PARÂMETROS EM ARIAL TAMANHO 9.</p>
           <div className="flex gap-2">
             <span>SISTEMA PRETO SOLIDIFICADO</span>
             <span>|</span>
