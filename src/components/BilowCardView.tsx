@@ -37,48 +37,53 @@ export const PixelSkull = () => (
 // Dynamic calculator functions based on user guidelines
 export function calculateVida(pesoStr: string): number {
   const peso = parseFloat(pesoStr) || 0;
-  if (peso < 0) return 1;
-  if (peso <= 10) return 1;
-  if (peso <= 50) return 2;
-  if (peso <= 100) return 3;
-  if (peso <= 150) return 4;
-  if (peso <= 200) return 5;
-  if (peso <= 250) return 6;
-  if (peso <= 300) return 7;
-  if (peso <= 350) return 8;
-  if (peso <= 400) return 9;
-  if (peso <= 450) return 10;
-  if (peso <= 500) return 11;
-  if (peso <= 550) return 12;
-  if (peso <= 600) return 13;
-  if (peso <= 650) return 14;
-  if (peso <= 700) return 15;
-  if (peso <= 750) return 16;
-  if (peso <= 800) return 17;
-  if (peso <= 850) return 18;
-  if (peso <= 900) return 19;
-  return 20; // 900 to 999 is 20
+  let vidaVal = 6; // default/fallback, also ensures minimum of 6
+  
+  if (peso >= 0 && peso <= 10) vidaVal = 10;
+  else if (peso > 10 && peso <= 50) vidaVal = 12;
+  else if (peso > 50 && peso <= 100) vidaVal = 14;
+  else if (peso > 100 && peso <= 150) vidaVal = 16;
+  else if (peso > 150 && peso <= 200) vidaVal = 18;
+  else if (peso > 200 && peso <= 250) vidaVal = 20;
+  else if (peso > 250 && peso <= 300) vidaVal = 22;
+  else if (peso > 300 && peso <= 350) vidaVal = 24;
+  else if (peso > 350 && peso <= 400) vidaVal = 26;
+  else if (peso > 400 && peso <= 450) vidaVal = 28;
+  else if (peso > 450 && peso <= 500) vidaVal = 30;
+  else if (peso > 500 && peso <= 550) vidaVal = 30;
+  else if (peso > 550 && peso <= 600) vidaVal = 30;
+  else if (peso > 600 && peso <= 650) vidaVal = 33;
+  else if (peso > 650 && peso <= 700) vidaVal = 34;
+  else if (peso > 700 && peso <= 750) vidaVal = 35;
+  else if (peso > 750 && peso <= 800) vidaVal = 36;
+  else if (peso > 800 && peso <= 850) vidaVal = 37;
+  else if (peso > 850 && peso <= 900) vidaVal = 38;
+  else if (peso > 900) vidaVal = 40; // up to 1000
+
+  return Math.max(6, vidaVal);
 }
 
 export function calculatePowerAtakMod(pesoStr: string): string {
   const peso = parseFloat(pesoStr) || 0;
-  if (peso <= 50) return '+1';
-  if (peso <= 100) return '+2';
-  if (peso <= 200) return '+3';
-  if (peso <= 400) return '+4';
-  if (peso <= 600) return '+5';
-  return '+6'; // 600 to 999
+  if (peso >= 0 && peso <= 50) return '+1';
+  if (peso > 50 && peso <= 100) return '+2';
+  if (peso > 100 && peso <= 200) return '+3';
+  if (peso > 200 && peso <= 400) return '+4';
+  if (peso > 400 && peso <= 600) return '+5';
+  if (peso > 600) return '+6';
+  return '+1'; // fallback
 }
 
 export function calculateDefesa(pesoStr: string): number {
   const peso = parseFloat(pesoStr) || 0;
-  if (peso <= 10) return 0;
-  if (peso <= 100) return 1;
-  if (peso <= 200) return 2;
-  if (peso <= 300) return 3;
-  if (peso <= 400) return 4;
-  if (peso <= 500) return 5;
-  return 6; // 500 to 999
+  if (peso >= 0 && peso <= 10) return 6;
+  if (peso > 10 && peso <= 100) return 5;
+  if (peso > 100 && peso <= 200) return 4;
+  if (peso > 200 && peso <= 300) return 3;
+  if (peso > 300 && peso <= 400) return 2;
+  if (peso > 400 && peso <= 500) return 1;
+  if (peso > 500) return 1;
+  return 1; // fallback
 }
 
 export function calculateAntipoda(elemento: string, pesoStr: string): string {
@@ -120,30 +125,29 @@ export function getDeterministicValue(cardId: string, options: string[], seed: n
 }
 
 // Automatically calculate state and raffle values for the warrior battle behaviors
-export function generateAutomaticBehavior(pesoStr: string) {
+export function generateAutomaticBehavior(pesoStr: string, currentAct?: string) {
   const peso = parseFloat(pesoStr) || 0;
   
   // 1. Roll NUMERO (random from 1 to 6)
-  // If peso is between 1 and 9 (inclusive, i.e., "entre 01 e 09"), add PAR and ÍMPAR to the pool
-  const numberPool = ['1', '2', '3', '4', '5', '6'];
-  if (peso >= 1 && peso <= 9) {
-    numberPool.push('PAR', 'ÍMPAR');
+  // If weight is less than 10 kilos, PAR or ÍMPAR
+  let chosenDado = '';
+  if (peso < 10) {
+    const numberPool = ['PAR', 'ÍMPAR'];
+    chosenDado = numberPool[Math.floor(Math.random() * numberPool.length)];
+  } else {
+    chosenDado = String(Math.floor(Math.random() * 6) + 1);
   }
-  const chosenDado = numberPool[Math.floor(Math.random() * numberPool.length)];
 
-  // 2. Roll ACT ("EU" or "OPONENTE")
-  const actPool = ['EU', 'OPONENTE'];
-  const chosenAct = actPool[Math.floor(Math.random() * actPool.length)];
+  // 2. ACT choice
+  const chosenAct = currentAct || (Math.random() < 0.5 ? 'EU' : 'O ADVERSÁRIO');
 
   // 3. Roll HIT depending on ACT
   let chosenHit = '';
   if (chosenAct === 'EU') {
-    // EU options: JOGO NOVAMENTE, DOBRA VALOR DO DADO, QUEBRO DEFESA
-    const euOptions = ['JOGO NOVAMENTE', 'DOBRA VALOR DO DADO', 'QUEBRO DEFESA'];
+    const euOptions = ['JOGO DE NOVO', 'IMUNIDADE ANTÍPODA', 'ATACO DOBRADO'];
     chosenHit = euOptions[Math.floor(Math.random() * euOptions.length)];
   } else {
-    // OPONENTE options: RECUA A CARTA, MUDA DE REINO
-    const oponenteOptions = ['RECUA A CARTA', 'MUDA DE REINO'];
+    const oponenteOptions = ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'];
     chosenHit = oponenteOptions[Math.floor(Math.random() * oponenteOptions.length)];
   }
 
@@ -168,11 +172,11 @@ export default function BilowCardView({
   // Computed visual parameters
   const calculatedVid = calculateVida(card.peso);
   const powerAtakShape = getDeterministicValue(card.id, ['QUADRADO', 'TRIANGULO', 'CIRCULO'], 5);
-  const calculatedAtkMod = "+ 2";
+  const calculatedAtkMod = calculatePowerAtakMod(card.peso);
   
   // Primary shapes (QUADRADO, TRIANGULO, CIRCULO) raffled deterministically per card
   const defesaShape = getDeterministicValue(card.id, ['QUADRADO', 'TRIANGULO', 'CIRCULO'], 3);
-  const calculatedDef = `${defesaShape} + 2`;
+  const calculatedDef = `${defesaShape} ${calculateDefesa(card.peso)}`;
   
   const calculatedAntipoda = calculateAntipoda(card.elemento, card.peso);
   const calculatedFraco = calculatedAntipoda;
@@ -188,14 +192,15 @@ export default function BilowCardView({
     background: '#ffffff',
     color: '#000000',
     fontFamily: 'Arial, sans-serif',
-    ...innerStyle
+    ...innerStyle,
+    height: '620px' // Lock strictly to 620px after any style extensions
   };
 
   const textClass = "font-sans-arial text-[9px] uppercase tracking-wider font-bold text-black";
 
   return (
     <div 
-      className="relative shrink-0 select-none bg-white border-2 border-black"
+      className="relative shrink-0 select-none pb-0"
       style={{ 
         width: `${420 * scale}px`, 
         height: `${620 * scale}px` 
@@ -218,88 +223,91 @@ export default function BilowCardView({
       {/* Actual Trading Card body */}
       <div 
         id={`card-${card.id}`}
-        className="card-print-render bg-white p-2.5 flex flex-col justify-between text-black border-[3px] border-black"
+        className="card-print-render bg-white p-2.5 flex flex-col justify-between text-black border-[3.5px] border-black"
         style={cardStyle}
       >
-        {/* logo do jogo (letra branca sobre fundo preto) */}
-        <div className="w-full flex flex-col items-center mb-1">
-          <div className="bg-black text-white px-4 py-1 text-center font-bold tracking-widest text-[9.5px]">
-            BILOW
+        {/* Top Header Section (Grouped to avoid automatic spacer stretching) */}
+        <div className="w-full flex flex-col gap-1 bg-white">
+          {/* logo do jogo (letra branca sobre fundo preto) */}
+          <div className="w-full flex flex-col items-center bg-white">
+            <div className="bg-black text-white px-4 py-1 text-center font-bold tracking-widest text-[9.5px] w-full">
+              BILOW
+            </div>
+            <div className="w-full border-t border-black/30 my-0.5" />
           </div>
-          <div className="w-full border-t border-black/30 my-1" />
+
+          {/* Inputs row */}
+          <div className="grid grid-cols-4 gap-1">
+            <div className="flex flex-col">
+              <span className="text-[7px] uppercase text-black font-extrabold mb-0.5">EVOC</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  maxLength={2}
+                  value={card.evoc ?? ''}
+                  placeholder="01"
+                  onChange={(e) => onCardChange?.({ evoc: e.target.value.replace(/[^0-9]/g, '') })}
+                  className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
+                />
+              ) : (
+                <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center">
+                  {card.evoc || '01'}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col col-span-2">
+              <span className="text-[7px] uppercase text-black font-extrabold mb-0.5">NOME</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  maxLength={12}
+                  value={card.name ?? ''}
+                  placeholder="SEM NOME"
+                  onChange={(e) => onCardChange?.({ name: e.target.value.substring(0, 12).toUpperCase() })}
+                  className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
+                />
+              ) : (
+                <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center truncate">
+                  {card.name || 'SEM NOME'}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col">
+              <span className="text-[7px] uppercase text-black font-extrabold mb-0.5">ELEMENTO</span>
+              {isEditing ? (
+                <select
+                  value={card.elemento || 'AG'}
+                  onChange={(e) => onCardChange?.({ elemento: e.target.value as any })}
+                  className="w-full border-2 border-black px-0.5 py-0.5 text-[9px] font-bold text-black bg-white focus:outline-none"
+                >
+                  <option value="AG">AG (ÁGUA)</option>
+                  <option value="TE">TE (TERRA)</option>
+                  <option value="AR">AR (AR)</option>
+                  <option value="FO">FO (FOGO)</option>
+                </select>
+              ) : (
+                <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center">
+                  {card.elemento || 'AG'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* VIDA bar display */}
+          <div className="w-full flex items-center justify-between border-2 border-black px-2 py-0.5 bg-neutral-100">
+            <span className="text-[12px] font-black text-black">VIDA</span>
+            <span className="text-[10px] font-black text-black bg-white border border-black px-2 py-0.2 min-w-[22px] text-center">
+              {calculatedVid}
+            </span>
+          </div>
         </div>
 
-        {/* Inputs row */}
-        <div className="grid grid-cols-4 gap-1 mb-1.5">
-          <div className="flex flex-col">
-            <span className="text-[7.5px] uppercase text-black font-extrabold mb-0.5">EVOC</span>
-            {isEditing ? (
-              <input
-                type="text"
-                maxLength={2}
-                value={card.evoc ?? ''}
-                placeholder="01"
-                onChange={(e) => onCardChange?.({ evoc: e.target.value.replace(/[^0-9]/g, '') })}
-                className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
-              />
-            ) : (
-              <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center">
-                {card.evoc || '01'}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col col-span-2">
-            <span className="text-[7.5px] uppercase text-black font-extrabold mb-0.5">NOME</span>
-            {isEditing ? (
-              <input
-                type="text"
-                maxLength={12}
-                value={card.name ?? ''}
-                placeholder="SEM NOME"
-                onChange={(e) => onCardChange?.({ name: e.target.value.substring(0, 12).toUpperCase() })}
-                className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black uppercase bg-white focus:outline-none focus:bg-stone-100"
-              />
-            ) : (
-              <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center truncate">
-                {card.name || 'SEM NOME'}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[7.5px] uppercase text-black font-extrabold mb-0.5">ELEMENTO</span>
-            {isEditing ? (
-              <select
-                value={card.elemento || 'AG'}
-                onChange={(e) => onCardChange?.({ elemento: e.target.value as any })}
-                className="w-full border-2 border-black px-0.5 py-0.5 text-[9px] font-bold text-black bg-white focus:outline-none"
-              >
-                <option value="AG">AG (ÁGUA)</option>
-                <option value="TE">TE (TERRA)</option>
-                <option value="AR">AR (AR)</option>
-                <option value="FO">FO (FOGO)</option>
-              </select>
-            ) : (
-              <div className="w-full border-2 border-black px-1 py-0.5 text-[9px] font-bold text-black min-h-[22px] bg-white flex items-center">
-                {card.elemento || 'AG'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* VIDA bar display */}
-        <div className="w-full mb-2 flex items-center justify-between border-2 border-black p-1 bg-neutral-100">
-          <span className="text-[13px] font-black text-black">VIDA</span>
-          <span className="text-[10px] font-black text-black bg-white border border-black px-1.5 py-0.2 min-w-[20px] text-center">
-            {calculatedVid}
-          </span>
-        </div>
-
-        {/* PAISAGEM Box (400x245px, white, outlined 2px) */}
+        {/* PAISAGEM Box (400x215px, white, outlined 2px) */}
         <div 
-          className="relative overflow-hidden bg-white border-2 border-black mx-auto flex items-center justify-center shadow-inner"
-          style={{ width: '400px', height: '245px' }}
+          className="relative overflow-hidden bg-white border-2 border-black mx-auto flex items-center justify-center shadow-inner my-0.5"
+          style={{ width: '400px', height: '215px' }}
         >
           {canvasElement ? (
             canvasElement
@@ -324,11 +332,11 @@ export default function BilowCardView({
         </div>
 
         {/* Divided section: Left Half vs Right Half (each sized to fit beautifully side-by-side) */}
-        <div className="grid grid-cols-2 gap-2 mt-2 pt-1 border-t-2 border-black">
+        <div className="grid grid-cols-2 gap-2 pt-1 border-t-2 border-black">
           
           {/* LEFT HALF (200x200px equivalent) */}
-          <div className="flex flex-col justify-between" style={{ height: '210px' }}>
-            <div className="space-y-1">
+          <div className="flex flex-col justify-between h-[270px]" style={{ height: '270px' }}>
+            <div className="space-y-1.5 pt-0.5">
               {/* Peso Row */}
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-bold text-black uppercase">PESO</span>
@@ -339,14 +347,22 @@ export default function BilowCardView({
                     placeholder="KG"
                     value={card.peso}
                     onChange={(e) => {
-                      const newPeso = e.target.value.replace(/[^0-9]/g, '');
+                      let newPeso = e.target.value.replace(/[^0-9]/g, '');
+                      if (newPeso && parseInt(newPeso) > 1000) {
+                        newPeso = '1000';
+                      }
                       const updates: Partial<BilowCard> = { peso: newPeso };
-                      
-                      // Roll automatically on weight adjustment
-                      const rolled = generateAutomaticBehavior(newPeso);
-                      updates.behaviorDado = rolled.behaviorDado;
-                      updates.behaviorAction = rolled.behaviorAction;
-                      updates.behaviorHit = rolled.behaviorHit;
+                      const pesoVal = parseFloat(newPeso) || 0;
+
+                      if (pesoVal < 10) {
+                        // Se inferior a 10 kilos, o usuario podera escolher PAR ou IMPAR.
+                        if (card.behaviorDado !== 'PAR' && card.behaviorDado !== 'ÍMPAR') {
+                          updates.behaviorDado = 'PAR';
+                        }
+                      } else {
+                        // se peso for de 10 a 1000, o dado sorteia um número de 1 a 6 e printa na casa número.
+                        updates.behaviorDado = String(Math.floor(Math.random() * 6) + 1);
+                      }
 
                       onCardChange?.(updates);
                     }}
@@ -401,109 +417,158 @@ export default function BilowCardView({
             </div>
 
             {/* Behavior Section */}
-            <div className="mt-2 border-t-[1.5px] border-black/30 pt-1">
+            <div className="mt-1 border-t-[1.5px] border-black/30 pt-1.5 pb-1">
               <span className="text-[8.5px] font-black tracking-tight text-black block mb-1">SE MEU DADO DER:</span>
               <div className="space-y-1">
-                {/* Behavior Input 1 (Dado dropdown transformed to SPAN with automatic raffle trigger) */}
+                {/* Behavior Input 1 (Dado dropdown / CASA NUMERO) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[9.5px] text-stone-500 font-bold">NÚMERO:</span>
                   {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const peso = parseFloat(card.peso) || 0;
-                        const numberPool = ['1', '2', '3', '4', '5', '6'];
-                        if (peso >= 1 && peso <= 9) {
-                          numberPool.push('PAR', 'ÍMPAR');
-                        }
-                        const chosenDado = numberPool[Math.floor(Math.random() * numberPool.length)];
-                        onCardChange?.({ behaviorDado: chosenDado });
-                      }}
-                      className="border-[1.5px] border-black bg-stone-100 hover:bg-stone-200 active:scale-95 text-[11px] font-bold text-black px-2 py-0.5 rounded leading-none text-center cursor-pointer min-w-[110px]"
-                      title="Sorteia novo número"
-                    >
-                      {card.behaviorDado || 'DADO'} 🎲
-                    </button>
+                    (parseFloat(card.peso) || 0) < 10 ? (
+                      <select
+                        value={card.behaviorDado === 'PAR' || card.behaviorDado === 'ÍMPAR' ? card.behaviorDado : 'PAR'}
+                        onChange={(e) => onCardChange?.({ behaviorDado: e.target.value })}
+                        className="border-[1.5px] border-black bg-white text-[11px] font-bold text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none"
+                      >
+                        <option value="PAR">PAR</option>
+                        <option value="ÍMPAR">ÍMPAR</option>
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-2 py-0.5 min-w-[76px] block text-center uppercase">
+                          {card.behaviorDado && ['1','2','3','4','5','6'].includes(card.behaviorDado) ? card.behaviorDado : '1'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = String(Math.floor(Math.random() * 6) + 1);
+                            onCardChange?.({ behaviorDado: val });
+                          }}
+                          className="border-[1.5px] border-black bg-stone-100 hover:bg-stone-200 active:scale-95 text-[11px] font-bold text-black px-1.5 py-0.5 rounded leading-none text-center cursor-pointer"
+                          title="Sorteia novo número entre 1 e 6"
+                        >
+                          🎲
+                        </button>
+                      </div>
+                    )
                   ) : (
-                    <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase">
-                      {card.behaviorDado === 'DADO' ? 'NÚMERO' : (card.behaviorDado || 'NÚMERO')}
+                    <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase text-black">
+                      {card.behaviorDado || 'NÚMERO'}
                     </span>
                   )}
                 </div>
 
-                {/* Behavior Input 2 (Action text transformed to SPAN with interactive raffle button trigger) */}
+                {/* Behavior Input 2 (ACT / ATOR) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[9.5px] text-stone-500 font-bold">ACT:</span>
                   {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const actPool = ['EU', 'OPONENTE'];
-                        const chosenAct = actPool[Math.floor(Math.random() * actPool.length)];
-                        let chosenHit = '';
-                        if (chosenAct === 'EU') {
-                          const euOptions = ['JOGO NOVAMENTE', 'DOBRA VALOR DO DADO', 'QUEBRO DEFESA'];
-                          chosenHit = euOptions[Math.floor(Math.random() * euOptions.length)];
+                    <select
+                      value={card.behaviorAction === 'EU' || card.behaviorAction === 'O ADVERSÁRIO' ? card.behaviorAction : 'EU'}
+                      onChange={(e) => {
+                        const actVal = e.target.value;
+                        let hitVal = '';
+                        if (actVal === 'EU') {
+                          hitVal = 'JOGO DE NOVO';
                         } else {
-                          const oponenteOptions = ['RECUA A CARTA', 'MUDA DE REINO'];
-                          chosenHit = oponenteOptions[Math.floor(Math.random() * oponenteOptions.length)];
+                          hitVal = 'MORRE';
                         }
                         onCardChange?.({
-                          behaviorAction: chosenAct,
-                          behaviorHit: chosenHit
+                          behaviorAction: actVal,
+                          behaviorHit: hitVal
                         });
                       }}
-                      className="border-[1.5px] border-black bg-amber-400 hover:bg-amber-500 active:scale-95 text-[10.5px] font-black text-black px-2 py-0.5 rounded leading-none text-center cursor-pointer min-w-[110px] flex items-center justify-center gap-1"
-                      title="Sortear: EU ou OPONENTE"
+                      className="border-[1.5px] border-black bg-amber-300 text-[10.5px] font-black text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none"
                     >
-                      <span className="uppercase text-center w-full">{card.behaviorAction || 'ACTION'} 🎲</span>
-                    </button>
+                      <option value="EU">EU</option>
+                      <option value="O ADVERSÁRIO">O ADVERSÁRIO</option>
+                    </select>
                   ) : (
-                    <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase">
+                    <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase text-black">
                       {card.behaviorAction || 'ACTION'}
                     </span>
                   )}
                 </div>
 
-                {/* Behavior Input 3 (Hit text transformed to clean read-only SPAN) */}
+                {/* Behavior Input 3 (HIT) */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[10.5px] text-stone-500 font-bold">HIT:</span>
-                  <span className="text-[10px] font-black border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] max-w-[115px] block text-center leading-[1.1] truncate uppercase" title={card.behaviorHit || 'HIT'}>
-                    {card.behaviorHit || 'HIT'}
-                  </span>
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={card.behaviorHit || 'HIT'}
+                        onChange={(e) => onCardChange?.({ behaviorHit: e.target.value })}
+                        className="border-[1.5px] border-black bg-white text-[9px] font-black text-black px-0.5 py-0.5 rounded leading-none h-[24px] min-w-[85px] max-w-[85px] focus:outline-none"
+                      >
+                        {card.behaviorAction === 'O ADVERSÁRIO' ? (
+                          <>
+                            <option value="MORRE">MORRE</option>
+                            <option value="PERDE ANTÍPODA">PERDE ANTÍPODA</option>
+                            <option value="PERDE DEFESA EXTRA">PERDE DEFESA EXTRA</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="JOGO DE NOVO">JOGO DE NOVO</option>
+                            <option value="IMUNIDADE ANTÍPODA">IMUNIDADE ANTÍPODA</option>
+                            <option value="ATACO DOBRADO">ATACO DOBRADO</option>
+                          </>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isOponente = card.behaviorAction === 'O ADVERSÁRIO';
+                          const pool = isOponente 
+                            ? ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA']
+                            : ['JOGO DE NOVO', 'IMUNIDADE ANTÍPODA', 'ATACO DOBRADO'];
+                          const val = pool[Math.floor(Math.random() * pool.length)];
+                          onCardChange?.({ behaviorHit: val });
+                        }}
+                        className="border-[1.5px] border-black bg-stone-100 hover:bg-stone-200 active:scale-95 text-[10px] font-bold text-black px-1.5 py-0.5 rounded leading-none text-center cursor-pointer"
+                        title="Sorteia ação do HIT"
+                      >
+                        🎲
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] font-black border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] max-w-[115px] block text-center leading-[1.1] truncate uppercase text-black" title={card.behaviorHit || 'HIT'}>
+                      {card.behaviorHit || 'HIT'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           {/* RIGHT HALF (200x200px equivalent containing Checkboard Paper Grid + skull) */}
-          <div className="flex flex-col justify-between" style={{ height: '210px' }}>
-            {/* Grid 5 columns x 4 lines */}
+          <div className="flex flex-col justify-between h-[270px]" style={{ height: '270px' }}>
+            {/* Grid divided into 40 squares (5 columns x 8 lines to form exactly 40 slots) */}
             <div className="border-[2px] border-black grid grid-cols-5 bg-white flex-grow">
-              {Array.from({ length: 19 }).map((_, index) => {
-                const isLit = currentHp !== undefined && (index + 1) === currentHp;
-                return (
-                  <div 
-                    key={index} 
-                    className={`border border-black/30 flex items-center justify-center text-[9px] font-black transition-all duration-300 ${
-                      isLit 
-                        ? 'bg-red-600 text-white animate-pulse shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] font-extrabold scale-105 border-red-700 z-10' 
-                        : 'text-black bg-white hover:bg-neutral-55'
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-                );
-              })}
-              
-              {/* 20th square has custom pixel art skull */}
+              {/* Casa 1 (primeira casa): Skull */}
               <div className="border border-black flex items-center justify-center bg-zinc-100 hover:bg-zinc-200 transition-colors">
                 <PixelSkull />
               </div>
+              
+              {/* Casa 2 to 40: numbered squares */}
+              {Array.from({ length: 39 }).map((_, idx) => {
+                const num = idx + 2; // starts from 2, goes up to 40
+                const isLit = currentHp !== undefined && num === currentHp;
+                return (
+                  <div 
+                    key={num} 
+                    className={`border border-black/30 flex items-center justify-center text-[8.5px] font-black transition-all duration-300 ${
+                      isLit 
+                        ? 'bg-red-600 text-white animate-pulse shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] font-extrabold scale-105 border-red-700 z-10' 
+                        : 'text-black bg-white hover:bg-neutral-50'
+                    }`}
+                  >
+                    {num}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Footer with twitter-handle / creator ID input, max 20 characters */}
-            <div className="mt-2.5">
+            <div className="mt-2">
               {isEditing ? (
                 <div className="flex items-center border-[1.5px] border-black bg-white px-1 py-0.5">
                   <input

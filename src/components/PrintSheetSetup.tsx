@@ -39,7 +39,7 @@ function PowerCardView({
       className={`aspect-[63.5/88.9] border-4 border-black bg-white rounded-[14px] flex flex-col justify-between p-3.5 text-center text-black relative select-none ${
         showCutGuides ? 'outline outline-1 outline-dashed outline-zinc-300' : ''
       }`}
-      style={{ width: '206px', height: '288px' }}
+      style={{ width: '206px', height: '304px' }}
     >
       {/* Top Header */}
       <div className="flex justify-between items-center border-b border-zinc-300 pb-1 w-full text-black">
@@ -194,20 +194,20 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
             type="button"
             onClick={handleDownloadSheetImage}
             disabled={gridSlots.filter(Boolean).length === 0 || isExporting}
-            className="flex items-center gap-2 px-6 py-3.5 bg-zinc-900 text-white border-2 border-zinc-800 hover:border-white disabled:opacity-30 disabled:pointer-events-none font-black text-xs uppercase tracking-widest transition-all text-center justify-center cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 text-white border-2 border-zinc-800 hover:border-white disabled:opacity-30 disabled:pointer-events-none font-black text-[10px] uppercase tracking-wider transition-all text-center justify-center cursor-pointer"
             title="Salvar a folha completa com as 9 cartas já organizadas em um único arquivo de imagem de alta resolução pronto para impressão"
           >
-            <Download className="w-4 h-4 shrink-0 text-emerald-400" />
-            {isExporting ? 'GERANDO FOLHA... ⏳' : 'SALVAR FOLHA COMPLETA (.JPG) 💾'}
+            <Download className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            {isExporting ? 'GERANDO FOLHA... ⏳' : 'SALVAR FOLHA COMPLETA 💾'}
           </button>
 
           <button
             type="button"
             onClick={triggerNativePrint}
-            className="flex items-center gap-2 px-6 py-3.5 bg-white text-black border-2 border-white font-black text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all text-center justify-center cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white text-black border-2 border-white font-black text-[10px] uppercase tracking-wider hover:bg-black hover:text-white transition-all text-center justify-center cursor-pointer"
           >
-            <Printer className="w-4 h-4 shrink-0" />
-            IMPRIMIR ESTA FOLHA A4
+            <Printer className="w-3.5 h-3.5 shrink-0" />
+            IMPRIMIR A4
           </button>
         </div>
       </div>
@@ -413,7 +413,7 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
                     <div 
                       key={`empty-${index}`} 
                       className="aspect-[63.5/88.9] border-2 border-dashed border-zinc-300 rounded-[12px] bg-neutral-50/55 flex flex-col items-center justify-center text-zinc-800 font-bold gap-1 transition-colors"
-                      style={{ width: '206px', height: '288px' }}
+                      style={{ width: '206px', height: '304px' }}
                     >
                       <Grid className="w-5 h-5 opacity-40" />
                       <span className="text-[8px] uppercase tracking-wider font-mono">POSIÇÃO {index + 1}</span>
@@ -443,18 +443,10 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
                     ) : (
                       /* Card Back visual placeholder for printing */
                       <div 
-                        className="aspect-[63.5/88.9] border-4 border-black bg-black rounded-[14px] flex flex-col justify-between p-3.5 text-center text-white"
-                        style={{ width: '206px', height: '288px' }}
+                        className="aspect-[63.5/88.9] border-4 border-black bg-white rounded-[14px] flex flex-col justify-center items-center p-3.5 text-center text-black"
+                        style={{ width: '206px', height: '304px', fontFamily: 'Arial, Helvetica, sans-serif' }}
                       >
-                        <div className="border border-zinc-700 py-1 flex items-center justify-center text-[10px] bg-zinc-900 font-bold tracking-widest text-white uppercase">
-                          BILOWS
-                        </div>
-                        <div className="flex flex-col items-center justify-center flex-grow">
-                          <span className="text-[8px] text-zinc-500 font-mono uppercase">
-                            {isPower ? `RECURSO ${(card as any).shape}` : 'MÃO OFICIAL'}
-                          </span>
-                        </div>
-                        <div className="text-[8.5px] font-black tracking-widest text-[#ffffff] bg-black border border-white p-1">
+                        <div className="text-[22px] font-bold tracking-widest text-black uppercase">
                           BILOW
                         </div>
                       </div>
@@ -501,18 +493,10 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
                     )
                   ) : (
                     <div 
-                      className="aspect-[63.5/88.9] border-4 border-black bg-black rounded-[14px] flex flex-col justify-between p-3.5 text-center text-white"
-                      style={{ width: '206px', height: '288px' }}
+                      className="aspect-[63.5/88.9] border-4 border-black bg-white rounded-[14px] flex flex-col justify-center items-center p-3.5 text-center text-black"
+                      style={{ width: '206px', height: '304px', fontFamily: 'Arial, Helvetica, sans-serif' }}
                     >
-                      <div className="border border-zinc-700 py-1 flex items-center justify-center text-[10px] bg-zinc-900 font-bold tracking-widest text-white uppercase">
-                        BILOWS
-                      </div>
-                      <div className="flex flex-col items-center justify-center flex-grow">
-                        <span className="text-[8px] text-zinc-500 font-mono uppercase">
-                          {isPower ? `RECURSO ${(card as any).shape}` : 'MÃO OFICIAL'}
-                        </span>
-                      </div>
-                      <div className="text-[8.5px] font-black tracking-widest text-[#ffffff] bg-black border border-white p-1">
+                      <div className="text-[22px] font-bold tracking-widest text-black uppercase">
                         BILOW
                       </div>
                     </div>
@@ -545,7 +529,7 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
                   <div 
                     key={`capture-empty-${index}`} 
                     className="aspect-[63.5/88.9] border-2 border-dashed border-zinc-300 rounded-[12px] bg-[#fcfcfc] flex flex-col items-center justify-center text-zinc-400 font-bold gap-1"
-                    style={{ width: '206px', height: '288px' }}
+                    style={{ width: '206px', height: '304px' }}
                   >
                     <Grid className="w-5 h-5 opacity-30 text-zinc-500" />
                     <span className="text-[8px] uppercase tracking-wider font-mono text-zinc-500">POSIÇÃO {index + 1}</span>
@@ -556,7 +540,7 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
               const isPower = 'isPower' in card;
 
               return (
-                <div key={`capture-card-${card.id}-${index}`} className="relative bg-white" style={{ width: '206px', height: '288px', overflow: 'hidden' }}>
+                <div key={`capture-card-${card.id}-${index}`} className="relative bg-white" style={{ width: '206px', height: '304px', overflow: 'hidden' }}>
                   {printMode === 'front' ? (
                     isPower ? (
                       <PowerCardView 
@@ -574,18 +558,10 @@ export default function PrintSheetSetup({ cards }: PrintSheetSetupProps) {
                     )
                   ) : (
                     <div 
-                      className="aspect-[63.5/88.9] border-4 border-black bg-black rounded-[14px] flex flex-col justify-between p-3.5 text-center text-white"
-                      style={{ width: '206px', height: '288px' }}
+                      className="aspect-[63.5/88.9] border-4 border-black bg-white rounded-[14px] flex flex-col justify-center items-center p-3.5 text-center text-black"
+                      style={{ width: '206px', height: '304px', fontFamily: 'Arial, Helvetica, sans-serif' }}
                     >
-                      <div className="border border-zinc-700 py-1 flex items-center justify-center text-[10px] bg-zinc-900 font-bold tracking-widest text-white uppercase">
-                        BILOWS
-                      </div>
-                      <div className="flex flex-col items-center justify-center flex-grow">
-                        <span className="text-[8px] text-zinc-500 font-mono uppercase">
-                          {isPower ? `RECURSO ${(card as any).shape}` : 'MÃO OFICIAL'}
-                        </span>
-                      </div>
-                      <div className="text-[8.5px] font-black tracking-widest text-[#ffffff] bg-black border border-white p-1">
+                      <div className="text-[22px] font-bold tracking-widest text-black uppercase">
                         BILOW
                       </div>
                     </div>

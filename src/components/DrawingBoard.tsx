@@ -148,10 +148,28 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   // State for UI updates only
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const isHistoryProcessing = useRef(false);
+  const isHistoryProcessing = useRef(true);
+
+  // Set anonymous crossOrigin by default on both fabric.Image and fabric.FabricImage (v6/v7) prototypes to prevent canvas taint issues
+  useEffect(() => {
+    if (fabric.Image && fabric.Image.prototype) {
+      try {
+        (fabric.Image.prototype as any).crossOrigin = 'anonymous';
+      } catch (e) {
+        console.warn("Could not set fabric.Image prototype crossOrigin", e);
+      }
+    }
+    if ((fabric as any).FabricImage && (fabric as any).FabricImage.prototype) {
+      try {
+        (fabric as any).FabricImage.prototype.crossOrigin = 'anonymous';
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
   
   const [fillColor, setFillColor] = useState("transparent");
-  const [strokeColor, setStrokeColor] = useState("#ffffff");
+  const [strokeColor, setStrokeColor] = useState("#000000");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [fontSize, setFontSize] = useState(24);
   const [fontFamily, setFontFamily] = useState("Arial");
@@ -181,19 +199,23 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   // Trigger reactive updates to parent and local history track
   const saveHistory = useCallback(() => {
     if (!fabricCanvasRef.current || isHistoryProcessing.current || isDisposingRef.current) return;
-    const json = JSON.stringify(fabricCanvasRef.current.toObject());
-    
-    const newHistory = [...historyRef.current.slice(0, historyIndexRef.current + 1), json];
-    historyRef.current = newHistory.slice(-50);
-    historyIndexRef.current = historyRef.current.length - 1;
-    
-    setCanUndo(historyIndexRef.current > 0);
-    setCanRedo(false);
+    try {
+      const json = JSON.stringify(fabricCanvasRef.current.toObject(['isCardBackground', 'selectable', 'evented', 'id', 'crossOrigin']));
+      
+      const newHistory = [...historyRef.current.slice(0, historyIndexRef.current + 1), json];
+      historyRef.current = newHistory.slice(-50);
+      historyIndexRef.current = historyRef.current.length - 1;
+      
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
 
-    // Call save image callback to sync the card artwork instantly
-    const dataUrl = getExportDataUrl();
-    if (dataUrl) {
-      onSaveImageRef.current(dataUrl);
+      // Call save image callback to sync the card artwork instantly
+      const dataUrl = getExportDataUrl();
+      if (dataUrl) {
+        onSaveImageRef.current(dataUrl);
+      }
+    } catch (err) {
+      console.error("Erro ao salvar histórico do canvas:", err);
     }
   }, [getExportDataUrl]);
 
@@ -369,11 +391,12 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   };
 
   useEffect(() => {
+    isDisposingRef.current = false;
     if (!canvasRef.current) return;
 
     const isCardMode = !!card;
     const canvasWidth = isCardMode ? 400 : 1000;
-    const canvasHeight = isCardMode ? 245 : 400;
+    const canvasHeight = isCardMode ? 215 : 400;
 
     const canvasEl = canvasRef.current;
 
@@ -395,15 +418,14 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
         if (activeToolRef.current === "polyline" && isDrawingPolylineRef.current) {
           e.preventDefault();
           e.stopPropagation();
-          finalizePolylineRef.current();
+          // Do not automatically finalize on double-click so the user is not restricted in drawing speed or area
         }
       });
     }
 
-    // Load initial background/illustration image if edited card exists exactly once
+    // Load initial background/illustration image if edited card exists
     const initialUrl = initialDataUrlRef.current;
-    if (initialUrl && !initialUrlLoadedRef.current) {
-      initialUrlLoadedRef.current = true;
+    if (initialUrl) {
       fabric.Image.fromURL(initialUrl, { crossOrigin: 'anonymous' }).then((img) => {
         const scaleX = canvas.width / img.width;
         const scaleY = canvas.height / img.height;
@@ -421,19 +443,22 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
         canvas.sendObjectToBack(img);
         canvas.renderAll();
 
-        const initialJson = JSON.stringify(canvas.toObject());
+        const initialJson = JSON.stringify(canvas.toObject(['isCardBackground', 'selectable', 'evented', 'id', 'crossOrigin']));
         historyRef.current = [initialJson];
         historyIndexRef.current = 0;
+        isHistoryProcessing.current = false;
       }).catch((err) => {
         console.error("Erro ao carregar imagem original", err);
-        const initialJson = JSON.stringify(canvas.toObject());
+        const initialJson = JSON.stringify(canvas.toObject(['isCardBackground', 'selectable', 'evented', 'id', 'crossOrigin']));
         historyRef.current = [initialJson];
         historyIndexRef.current = 0;
+        isHistoryProcessing.current = false;
       });
     } else {
-      const initialJson = JSON.stringify(canvas.toObject());
+      const initialJson = JSON.stringify(canvas.toObject(['isCardBackground', 'selectable', 'evented', 'id', 'crossOrigin']));
       historyRef.current = [initialJson];
       historyIndexRef.current = 0;
+      isHistoryProcessing.current = false;
     }
 
     setCanUndo(false);
@@ -530,24 +555,12 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
         const firstPt = pts[0] || { x, y };
         const distToStart = Math.hypot(x - firstPt.x, y - firstPt.y);
 
-        if (distToStart < 20 && pts.length >= 3) {
-          // Close the figure by snapping the last point to the start point and finalizing
+        if (distToStart < 25 && pts.length >= 3) {
+          // Close the figure by snapping the last point to the start point and finalizing as closed loop
           pts[pts.length - 1] = { x: firstPt.x, y: firstPt.y };
           polylinePointsRef.current = pts;
           finalizePolylineRef.current(true);
           return;
-        }
-
-        // Tap or click on the same spot as the last vertex to finalize drawing
-        if (pts.length >= 3) {
-          const lastPlaced = pts[pts.length - 2];
-          if (lastPlaced) {
-            const distToLast = Math.hypot(x - lastPlaced.x, y - lastPlaced.y);
-            if (distToLast < 10) {
-              finalizePolylineRef.current();
-              return;
-            }
-          }
         }
 
         pts[pts.length - 1] = { x, y };
@@ -584,7 +597,7 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
 
     canvas.on("mouse:dblclick", () => {
       if (activeToolRef.current !== "polyline" || !isDrawingPolylineRef.current) return;
-      finalizePolylineRef.current();
+      // Do not automatically finalize on double-click so the user is not restricted in drawing speed or area
     });
 
     // Keyboard Shortcuts
@@ -615,7 +628,6 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       if (isCtrl && e.key === 'v') paste();
       
       if (e.key === 'v') setTool('select');
-      if (e.key === 't') addText();
       if (e.key === 'r') addRect();
       if (e.key === 'o') addCircle();
 
@@ -689,38 +701,68 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
   }, []);
 
   const undo = () => {
+    if (isHistoryProcessing.current) return;
     if (historyIndexRef.current > 0) {
       const nextIndex = historyIndexRef.current - 1;
-      const state = historyRef.current[nextIndex];
-      isHistoryProcessing.current = true;
-      fabricCanvasRef.current?.loadFromJSON(state).then(() => {
-        fabricCanvasRef.current?.renderAll();
-        isHistoryProcessing.current = false;
-        historyIndexRef.current = nextIndex;
-        setCanUndo(nextIndex > 0);
-        setCanRedo(true);
+      historyIndexRef.current = nextIndex;
+      setCanUndo(nextIndex > 0);
+      setCanRedo(true);
 
-        const dataUrl = getExportDataUrl();
-        if (dataUrl) onSaveImage(dataUrl);
-      });
+      const stateStr = historyRef.current[nextIndex];
+      isHistoryProcessing.current = true;
+      try {
+        const stateObj = typeof stateStr === 'string' ? JSON.parse(stateStr) : stateStr;
+        fabricCanvasRef.current?.discardActiveObject();
+        fabricCanvasRef.current?.loadFromJSON(stateObj).then(() => {
+          fabricCanvasRef.current?.renderAll();
+
+          const dataUrl = getExportDataUrl();
+          if (dataUrl) onSaveImage(dataUrl);
+
+          setTimeout(() => {
+            isHistoryProcessing.current = false;
+          }, 100);
+        }).catch((err) => {
+          console.error("Erro no loadFromJSON do undo:", err);
+          isHistoryProcessing.current = false;
+        });
+      } catch (err) {
+        console.error("Erro ao processar JSON no undo:", err);
+        isHistoryProcessing.current = false;
+      }
     }
   };
 
   const redo = () => {
+    if (isHistoryProcessing.current) return;
     if (historyIndexRef.current < historyRef.current.length - 1) {
       const nextIndex = historyIndexRef.current + 1;
-      const state = historyRef.current[nextIndex];
-      isHistoryProcessing.current = true;
-      fabricCanvasRef.current?.loadFromJSON(state).then(() => {
-        fabricCanvasRef.current?.renderAll();
-        isHistoryProcessing.current = false;
-        historyIndexRef.current = nextIndex;
-        setCanUndo(true);
-        setCanRedo(nextIndex < historyRef.current.length - 1);
+      historyIndexRef.current = nextIndex;
+      setCanUndo(true);
+      setCanRedo(nextIndex < historyRef.current.length - 1);
 
-        const dataUrl = getExportDataUrl();
-        if (dataUrl) onSaveImage(dataUrl);
-      });
+      const stateStr = historyRef.current[nextIndex];
+      isHistoryProcessing.current = true;
+      try {
+        const stateObj = typeof stateStr === 'string' ? JSON.parse(stateStr) : stateStr;
+        fabricCanvasRef.current?.discardActiveObject();
+        fabricCanvasRef.current?.loadFromJSON(stateObj).then(() => {
+          fabricCanvasRef.current?.renderAll();
+
+          const dataUrl = getExportDataUrl();
+          if (dataUrl) onSaveImage(dataUrl);
+
+          setTimeout(() => {
+            isHistoryProcessing.current = false;
+          }, 100);
+        }).catch((err) => {
+          console.error("Erro no loadFromJSON do redo:", err);
+          isHistoryProcessing.current = false;
+        });
+      } catch (err) {
+        console.error("Erro ao processar JSON no redo:", err);
+        isHistoryProcessing.current = false;
+      }
     }
   };
 
@@ -738,6 +780,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       height: 100,
     });
     fabricCanvasRef.current?.add(rect);
+    fabricCanvasRef.current?.setActiveObject(rect);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -765,6 +809,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       height: 100,
     });
     fabricCanvasRef.current?.add(tri);
+    fabricCanvasRef.current?.setActiveObject(tri);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -777,6 +823,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(pent);
+    fabricCanvasRef.current?.setActiveObject(pent);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -791,6 +839,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(star);
+    fabricCanvasRef.current?.setActiveObject(star);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -805,6 +855,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(star);
+    fabricCanvasRef.current?.setActiveObject(star);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -817,6 +869,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(trap);
+    fabricCanvasRef.current?.setActiveObject(trap);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -827,6 +881,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(rect);
+    fabricCanvasRef.current?.setActiveObject(rect);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -837,6 +893,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: 10, // Higher stroke for path
     });
     fabricCanvasRef.current?.add(heart);
+    fabricCanvasRef.current?.setActiveObject(heart);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -849,6 +907,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(zap);
+    fabricCanvasRef.current?.setActiveObject(zap);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -859,6 +919,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(moon);
+    fabricCanvasRef.current?.setActiveObject(moon);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -871,6 +933,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       stroke: strokeColor, strokeWidth: strokeWidth,
     });
     fabricCanvasRef.current?.add(arrow);
+    fabricCanvasRef.current?.setActiveObject(arrow);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -882,6 +946,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       strokeLineCap: 'round'
     });
     fabricCanvasRef.current?.add(line);
+    fabricCanvasRef.current?.setActiveObject(line);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -893,6 +959,8 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
       fill: strokeColor
     });
     fabricCanvasRef.current?.add(text);
+    fabricCanvasRef.current?.setActiveObject(text);
+    fabricCanvasRef.current?.renderAll();
     setTool('select');
   };
 
@@ -1109,7 +1177,6 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
             <ToolButton active={activeTool === 'line'} onClick={() => { setTool('line'); addLine(); }} icon={<Minus className="w-4 h-4" />} title="Linha Reta" />
             <ToolButton active={activeTool === 'polyline'} onClick={() => setTool('polyline')} icon={<Spline className="w-4 h-4" />} title="Polilinha Interativa" />
           </div>
-          <ToolButton onClick={addText} icon={<Type className="w-4 h-4" />} title="Texto (T)" />
         </div>
 
         {/* SPECIAL SHAPES GROUP */}
@@ -1128,49 +1195,93 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
 
         {/* STYLE CONTROLS */}
         <div className="flex items-center space-x-3 border-r pr-2 ml-2">
-          <label className="flex items-center space-x-1 cursor-pointer group" title="Cor de Preenchimento">
-            <PaintBucket 
-              className="w-4 h-4 transition-colors group-hover:text-black" 
-              style={{ color: fillColor === 'transparent' ? '#cbd5e1' : fillColor }}
-            />
-            <input 
-              type="color" 
-              className="w-0 h-0 opacity-0 absolute"
-              value={fillColor === 'transparent' ? '#ffffff' : fillColor}
-              onChange={(e) => handleUpdateStyle('fill', e.target.value)}
-            />
-            <div 
-              className="w-5 h-5 rounded border border-gray-300 shadow-sm"
-              style={{ backgroundColor: fillColor === 'transparent' ? 'white' : fillColor, backgroundImage: fillColor === 'transparent' ? 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)' : 'none', backgroundSize: '4px 4px', backgroundPosition: '0 0, 2px 2px' }}
-            />
-            <button 
-              onClick={(e) => {
-                e.preventDefault();
-                handleUpdateStyle('fill', 'transparent');
-              }} 
-              className="text-[9px] font-bold text-gray-400 hover:text-red-500 ml-0.5"
-              title="Remover Preenchimento"
-            >
-              X
-            </button>
-          </label>
+          {/* Fill Color selection */}
+          <div className="flex items-center space-x-1" title="Preenchimento">
+            <label className="flex items-center space-x-1 cursor-pointer group" title="Escolher Cor de Preenchimento">
+              <PaintBucket 
+                className="w-4 h-4 transition-colors group-hover:text-black" 
+                style={{ color: fillColor === 'transparent' ? '#cbd5e1' : fillColor }}
+              />
+              <input 
+                type="color" 
+                className="w-0 h-0 opacity-0 absolute"
+                value={fillColor === 'transparent' ? '#ffffff' : fillColor}
+                onChange={(e) => handleUpdateStyle('fill', e.target.value)}
+              />
+              <div 
+                className="w-5 h-5 rounded border border-gray-300 shadow-sm transition-transform hover:scale-105"
+                style={{ 
+                  backgroundColor: fillColor === 'transparent' ? 'white' : fillColor, 
+                  backgroundImage: fillColor === 'transparent' ? 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)' : 'none', 
+                  backgroundSize: '4px 4px', 
+                  backgroundPosition: '0 0, 2px 2px' 
+                }}
+              />
+            </label>
+            
+            {/* Quick Swatches for Fill */}
+            <div className="flex items-center space-x-0.5 ml-1 bg-gray-50 p-0.5 rounded border border-gray-100">
+              {['#000000', '#ffffff', '#ef4444', '#3b82f6', '#22c55e', '#eab308', 'transparent'].map((color) => (
+                <button
+                  key={`fill-${color}`}
+                  type="button"
+                  onClick={() => handleUpdateStyle('fill', color)}
+                  className={`w-3.5 h-3.5 rounded-full border border-gray-300 relative focus:outline-none transition-transform hover:scale-110 active:scale-95 ${fillColor === color ? 'ring-1 ring-zinc-600 ring-offset-0.5 z-10 scale-105' : ''}`}
+                  style={{
+                    backgroundColor: color === 'transparent' ? 'white' : color,
+                    backgroundImage: color === 'transparent' ? 'linear-gradient(45deg, #ef4444 25%, transparent 25%, transparent 75%, #ef4444 75%, #ef4444), linear-gradient(45deg, #ef4444 25%, transparent 25%, transparent 75%, #ef4444 75%, #ef4444)' : 'none',
+                    backgroundSize: '4px 4px',
+                    backgroundPosition: '0 0, 2px 2px'
+                  }}
+                  title={color === 'transparent' ? 'Preenchimento Transparente' : `Preencher com ${color}`}
+                />
+              ))}
+            </div>
+          </div>
 
-          <label className="flex items-center space-x-1 cursor-pointer group" title="Cor da Linha / Texto">
-            <Palette 
-              className="w-4 h-4 transition-colors group-hover:text-black" 
-              style={{ color: strokeColor }}
-            />
-            <input 
-              type="color" 
-              className="w-0 h-0 opacity-0 absolute"
-              value={strokeColor}
-              onChange={(e) => handleUpdateStyle('stroke', e.target.value)}
-            />
-            <div 
-              className="w-5 h-5 rounded border border-gray-300 shadow-sm"
-              style={{ backgroundColor: strokeColor }}
-            />
-          </label>
+          {/* Stroke/Text Color selection */}
+          <div className="flex items-center space-x-1" title="Contorno / Linha / Texto">
+            <label className="flex items-center space-x-1 cursor-pointer group" title="Escolher Cor do Contorno">
+              <Palette 
+                className="w-4 h-4 transition-colors group-hover:text-black" 
+                style={{ color: strokeColor === 'transparent' ? '#cbd5e1' : strokeColor }}
+              />
+              <input 
+                type="color" 
+                className="w-0 h-0 opacity-0 absolute"
+                value={strokeColor === 'transparent' ? '#000000' : strokeColor}
+                onChange={(e) => handleUpdateStyle('stroke', e.target.value)}
+              />
+              <div 
+                className="w-5 h-5 rounded border border-gray-300 shadow-sm transition-transform hover:scale-105"
+                style={{ 
+                  backgroundColor: strokeColor === 'transparent' ? 'white' : strokeColor, 
+                  backgroundImage: strokeColor === 'transparent' ? 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)' : 'none', 
+                  backgroundSize: '4px 4px', 
+                  backgroundPosition: '0 0, 2px 2px' 
+                }}
+              />
+            </label>
+
+            {/* Quick Swatches for Stroke */}
+            <div className="flex items-center space-x-0.5 ml-1 bg-gray-50 p-0.5 rounded border border-gray-100">
+              {['#000000', '#ffffff', '#ef4444', '#3b82f6', '#22c55e', '#eab308', 'transparent'].map((color) => (
+                <button
+                  key={`stroke-${color}`}
+                  type="button"
+                  onClick={() => handleUpdateStyle('stroke', color)}
+                  className={`w-3.5 h-3.5 rounded-full border border-gray-300 relative focus:outline-none transition-transform hover:scale-110 active:scale-95 ${strokeColor === color ? 'ring-1 ring-zinc-600 ring-offset-0.5 z-10 scale-105' : ''}`}
+                  style={{
+                    backgroundColor: color === 'transparent' ? 'white' : color,
+                    backgroundImage: color === 'transparent' ? 'linear-gradient(45deg, #ef4444 25%, transparent 25%, transparent 75%, #ef4444 75%, #ef4444), linear-gradient(45deg, #ef4444 25%, transparent 25%, transparent 75%, #ef4444 75%, #ef4444)' : 'none',
+                    backgroundSize: '4px 4px',
+                    backgroundPosition: '0 0, 2px 2px'
+                  }}
+                  title={color === 'transparent' ? 'Contorno Transparente' : `Linha/Texto cor ${color}`}
+                />
+              ))}
+            </div>
+          </div>
 
           <div className="flex items-center space-x-1 border-l pl-2" title="Espessura da Linha">
             <Hash className="w-3 h-3 text-gray-400" />
@@ -1181,29 +1292,6 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
             >
               {[0, 1, 2, 4, 8, 12, 16, 24, 32].map(w => (
                 <option key={w} value={w}>{w === 0 ? "SEM" : `${w}px`}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center space-x-1" title="Tamanho da Fonte">
-            <Type className="w-4 h-4 text-gray-400" />
-            <select 
-              className="text-xs font-bold bg-gray-50 rounded border px-1 text-gray-800"
-              value={fontSize}
-              onChange={(e) => handleUpdateStyle('fontSize', parseInt(e.target.value))}
-            >
-              {[12, 16, 20, 24, 32, 40, 48, 64, 72, 96, 128].map(s => (
-                <option key={s} value={s}>{s}px</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center space-x-1" title="Fonte">
-            <select 
-              className="text-[10px] font-bold bg-gray-50 rounded border px-1 w-20 text-gray-850"
-              value={fontFamily}
-              onChange={(e) => handleUpdateStyle('fontFamily', e.target.value)}
-            >
-              {['Arial', 'Courier New', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Impact', 'Comic Sans MS'].map(f => (
-                <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
               ))}
             </select>
           </div>
@@ -1331,24 +1419,24 @@ const DrawingBoard = React.forwardRef<DrawingCanvasRef, DrawingBoardProps>(({
         )}
 
         {card ? (
-          <div className="relative inline-block scale-95 md:scale-100 transition-all">
+          <div className="relative inline-block scale-100 md:scale-105 xl:scale-110 transition-all duration-300">
             <BilowCardView 
               card={card}
               isEditing={isEditing}
               onCardChange={onCardChange}
-              innerStyle={{ marginTop: '-22px', marginLeft: '0px' }}
+              innerStyle={{ marginLeft: '0px' }}
               canvasElement={
-                <div ref={containerRef} className="relative w-[400px] h-[245px] overflow-hidden">
+                <div ref={containerRef} className="relative w-[400px] h-[215px] overflow-hidden">
                   {/* Subtle Grid Background */}
                   <div className="absolute inset-0 pointer-events-none opacity-[0.05]" 
                        style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>
-                  <canvas ref={canvasRef} width={400} height={245} className="absolute inset-0 z-10" />
+                  <canvas ref={canvasRef} width={400} height={215} className="absolute inset-0 z-10" />
                 </div>
               }
             />
           </div>
         ) : (
-          <div ref={containerRef} className="bg-[#1e293b] shadow-2xl border border-white/10 relative inline-block rounded-xl overflow-hidden min-w-[400px] min-h-[245px]">
+          <div ref={containerRef} className="bg-[#1e293b] shadow-2xl border border-white/10 relative inline-block rounded-xl overflow-hidden min-w-[400px] min-h-[190px]">
             {/* Grid Background */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.1]" 
                  style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>

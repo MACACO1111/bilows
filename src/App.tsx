@@ -46,6 +46,7 @@ export default function App() {
   const [behaviorHit, setBehaviorHit] = useState('HIT');
   const [twitterHandle, setTwitterHandle] = useState('NOME DO DESIGNER');
   const [exportCard, setExportCard] = useState<BilowCard | null>(null);
+  const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
 
   // Copy success feedback state
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -184,12 +185,17 @@ export default function App() {
   };
 
   const handleDeleteCard = (id: string) => {
-    if (confirm('DESEJA BANIR ESTA CARTA DE SEU BARALHO?')) {
-      const nextDeck = deck.filter(c => c.id !== id);
+    setDeleteConfirmCardId(id);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirmCardId) {
+      const nextDeck = deck.filter(c => c.id !== deleteConfirmCardId);
       saveDeck(nextDeck);
-      if (editingCardId === id) {
+      if (editingCardId === deleteConfirmCardId) {
         handleResetForm();
       }
+      setDeleteConfirmCardId(null);
     }
   };
 
@@ -376,13 +382,13 @@ export default function App() {
     <div className="min-h-screen bg-[#2563eb] text-[#ffffff] flex flex-col font-mono uppercase tracking-wider text-[9px]">
       
       {/* 2px Solid White outlined retro main navbar header (No print) */}
-      <header className="no-print border-b-2 border-white bg-orange-600">
+      <header style={{ backgroundColor: '#220a75' }} className="no-print border-b-2 border-white">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div>
               {/* Special Game Title: can be a fancy-title under custom rule */}
               <h1 className="text-xl font-black tracking-widest text-[#ffffff] font-display flex items-baseline gap-2 leading-none">
-                CRIADOR DE CARTAS
+                BILOWS
               </h1>
             </div>
           </div>
@@ -469,8 +475,8 @@ export default function App() {
               
               {/* ACTIVE EDITING CARD LAYOUT AND DRAWING BOARD (Left 8 columns) */}
               <div 
-                style={{ marginTop: '-21px' }}
-                className="xl:col-span-8 w-full min-w-0 flex flex-col gap-4 bg-zinc-950 p-6 border-2 border-zinc-800 rounded-3xl overflow-hidden"
+                style={{ marginTop: '-21px', backgroundColor: '#222084' }}
+                className="xl:col-span-8 w-full min-w-0 flex flex-col gap-4 p-6 border-2 border-zinc-800 rounded-3xl overflow-hidden"
               >
                 
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/60 w-full">
@@ -478,14 +484,12 @@ export default function App() {
                   <div className="flex flex-wrap gap-1.5 shrink-0">
                     <button
                       onClick={handleSaveCard}
-                      style={{ marginTop: '-23px' }}
                       className="px-4 py-2 bg-white text-black text-[9px] font-black uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer"
                     >
                       {editingCardId ? 'REGISTRAR ALTERAÇÕES 💾' : 'REGISTRAR CARTA 💾'}
                     </button>
                     <button
                       onClick={handleDownloadSingleCard}
-                      style={{ marginTop: '-26px' }}
                       className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer"
                       title="Salvar esta carta no computador"
                     >
@@ -494,7 +498,6 @@ export default function App() {
                     {editingCardId && (
                       <button
                         onClick={handleResetForm}
-                        style={{ marginTop: '-24px' }}
                         className="px-3 py-2 bg-zinc-900 border border-zinc-800 hover:border-white text-white text-[9px] font-black uppercase cursor-pointer"
                         title="NOVO PERSONAGEM"
                       >
@@ -504,7 +507,6 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleRandomizePreset}
-                      style={!editingCardId ? { marginTop: '-24px' } : undefined}
                       className="px-3 py-2 bg-white border border-white hover:bg-zinc-200 text-black text-[9px] font-black uppercase cursor-pointer transition-colors"
                       title="Presets Aleatórios"
                     >
@@ -545,7 +547,10 @@ export default function App() {
 
               {/* SAVED DECK CARDS (Right 4 columns) */}
               <div className="xl:col-span-4 bg-orange-600 p-4 border-2 border-white rounded-3xl flex flex-col gap-4 relative z-20 text-white">
-                <div className="flex items-center justify-between border-b border-white/40 pb-2">
+                <div 
+                  style={{ backgroundColor: '#1ca31c' }}
+                  className="flex items-center justify-between border-b border-white/40 pb-2"
+                >
                   <div>
                     <span className="text-orange-100 block text-[8px]">LISTA ANALÓGICA</span>
                     <h3 className="text-xs font-black text-white">SEU BARALHO ({deck.length})</h3>
@@ -596,13 +601,6 @@ export default function App() {
                           className="px-2 py-1 bg-zinc-900 border border-zinc-700 hover:border-white text-[8px] font-bold text-white uppercase"
                         >
                           EDITAR
-                        </button>
-                        <button
-                          onClick={() => handleDuplicateCard(card)}
-                          className="px-2 py-1 bg-zinc-900 border border-zinc-700 hover:border-white text-[8px] font-bold text-stone-300 uppercase"
-                          title="CLONAR"
-                        >
-                          CLONAR
                         </button>
                         <button
                           onClick={() => handleDeleteCard(card.id)}
@@ -761,13 +759,6 @@ export default function App() {
                             title="SALVAR NO COMPUTADOR"
                           >
                             SALVAR
-                          </button>
-                          <button
-                            onClick={() => handleDuplicateCard(card)}
-                            className="bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white font-extrabold text-[7.5px] px-1.5 py-0.5 uppercase cursor-pointer"
-                            title="CLONAR ESTE MODELO"
-                          >
-                            CLONAR
                           </button>
                           <button
                             onClick={() => handleDeleteCard(card.id)}
@@ -1266,6 +1257,36 @@ export default function App() {
           </div>
         </div>
       </footer>
+      
+      {/* Custom Deletion Confirmation Modal */}
+      {deleteConfirmCardId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/80">
+          <div className="bg-zinc-950 border-2 border-red-500 rounded-2xl max-w-sm w-full p-6 text-center shadow-[0_0_30px_rgba(239,68,68,0.3)] animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="font-extrabold text-red-500 text-lg tracking-wider mb-2 uppercase">
+              ⚠️ BANIR CARTA?
+            </h3>
+            <p className="text-zinc-300 text-xs uppercase mb-6 leading-relaxed">
+              DESEJA MESMO EXCLUIR ESTA CARTA DE SEU BARALHO? ESTA AÇÃO NÃO PODE SER UNDONE.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmCardId(null)}
+                className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[10px] font-black uppercase rounded-lg border border-zinc-700 cursor-pointer transition-colors"
+              >
+                CANCELAR
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2 bg-red-950 hover:bg-red-900 border border-red-500 text-red-400 hover:text-white text-[10px] font-black uppercase rounded-lg cursor-pointer transition-colors"
+              >
+                SIM, EXCLUIR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
