@@ -147,7 +147,9 @@ export function generateAutomaticBehavior(pesoStr: string, currentAct?: string) 
     const euOptions = ['JOGO DE NOVO', 'IMUNIDADE ANTÍPODA', 'ATACO DOBRADO'];
     chosenHit = euOptions[Math.floor(Math.random() * euOptions.length)];
   } else {
-    const oponenteOptions = ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'];
+    const oponenteOptions = peso < 10 
+      ? ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'] 
+      : ['PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'];
     chosenHit = oponenteOptions[Math.floor(Math.random() * oponenteOptions.length)];
   }
 
@@ -184,6 +186,36 @@ export default function BilowCardView({
   // Stable random/drawn elements
   const powerAtakElement = powerAtakShape;
   const recuarElement = getDeterministicValue(card.id, ['QUADRADO', 'TRIANGULO', 'CIRCULO'], 2);
+
+  const pesoVal = parseFloat(card.peso) || 0;
+  const isLight = pesoVal < 10;
+
+  // Sanitize values for rendering dropdowns reliably without empty states
+  let sanitizedDado = card.behaviorDado || (isLight ? 'PAR' : '1');
+  if (isLight) {
+    if (sanitizedDado !== 'PAR' && sanitizedDado !== 'ÍMPAR') {
+      sanitizedDado = 'PAR';
+    }
+  } else {
+    if (!['1', '2', '3', '4', '5', '6'].includes(sanitizedDado)) {
+      sanitizedDado = '1';
+    }
+  }
+
+  const sanitizedAction = card.behaviorAction === 'EU' || card.behaviorAction === 'O ADVERSÁRIO' ? card.behaviorAction : 'EU';
+
+  let sanitizedHit = card.behaviorHit || (sanitizedAction === 'EU' ? 'JOGO DE NOVO' : (isLight ? 'MORRE' : 'PERDE ANTÍPODA'));
+  if (sanitizedAction === 'O ADVERSÁRIO') {
+    if (sanitizedHit === 'MORRE' && !isLight) {
+      sanitizedHit = 'PERDE ANTÍPODA';
+    } else if (sanitizedHit !== 'MORRE' && sanitizedHit !== 'PERDE ANTÍPODA' && sanitizedHit !== 'PERDE DEFESA EXTRA') {
+      sanitizedHit = isLight ? 'MORRE' : 'PERDE ANTÍPODA';
+    }
+  } else {
+    if (sanitizedHit !== 'JOGO DE NOVO' && sanitizedHit !== 'IMUNIDADE ANTÍPODA' && sanitizedHit !== 'ATACO DOBRADO') {
+      sanitizedHit = 'JOGO DE NOVO';
+    }
+  }
 
   const cardStyle: React.CSSProperties = {
     transform: `scale(${scale})`,
@@ -360,8 +392,14 @@ export default function BilowCardView({
                           updates.behaviorDado = 'PAR';
                         }
                       } else {
-                        // se peso for de 10 a 1000, o dado sorteia um número de 1 a 6 e printa na casa número.
-                        updates.behaviorDado = String(Math.floor(Math.random() * 6) + 1);
+                        // Se peso for de 10 a 1000, o usuario podera escolher um número de 1 a 6.
+                        if (!card.behaviorDado || !['1','2','3','4','5','6'].includes(card.behaviorDado)) {
+                          updates.behaviorDado = '1';
+                        }
+                      }
+
+                      if (pesoVal >= 10 && card.behaviorHit === 'MORRE') {
+                        updates.behaviorHit = 'PERDE ANTÍPODA';
                       }
 
                       onCardChange?.(updates);
@@ -424,20 +462,29 @@ export default function BilowCardView({
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[9.5px] text-stone-500 font-bold">NÚMERO:</span>
                   {isEditing ? (
-                    (parseFloat(card.peso) || 0) < 10 ? (
+                    isLight ? (
                       <select
-                        value={card.behaviorDado === 'PAR' || card.behaviorDado === 'ÍMPAR' ? card.behaviorDado : 'PAR'}
+                        value={sanitizedDado}
                         onChange={(e) => onCardChange?.({ behaviorDado: e.target.value })}
-                        className="border-[1.5px] border-black bg-white text-[11px] font-bold text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none"
+                        className="border-[1.5px] border-black bg-white text-[11px] font-bold text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none cursor-pointer"
                       >
                         <option value="PAR">PAR</option>
                         <option value="ÍMPAR">ÍMPAR</option>
                       </select>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-2 py-0.5 min-w-[76px] block text-center uppercase">
-                          {card.behaviorDado && ['1','2','3','4','5','6'].includes(card.behaviorDado) ? card.behaviorDado : '1'}
-                        </span>
+                        <select
+                          value={sanitizedDado}
+                          onChange={(e) => onCardChange?.({ behaviorDado: e.target.value })}
+                          className="border-[1.5px] border-black bg-white text-[11px] font-bold text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[76px] focus:outline-none cursor-pointer"
+                        >
+                          <option value="1 font-bold">1</option>
+                          <option value="2 font-bold">2</option>
+                          <option value="3 font-bold">3</option>
+                          <option value="4 font-bold">4</option>
+                          <option value="5 font-bold">5</option>
+                          <option value="6 font-bold">6</option>
+                        </select>
                         <button
                           type="button"
                           onClick={() => {
@@ -453,7 +500,7 @@ export default function BilowCardView({
                     )
                   ) : (
                     <span className="text-[11px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase text-black">
-                      {card.behaviorDado || 'NÚMERO'}
+                      {sanitizedDado}
                     </span>
                   )}
                 </div>
@@ -463,28 +510,28 @@ export default function BilowCardView({
                   <span className="text-[9.5px] text-stone-500 font-bold">ACT:</span>
                   {isEditing ? (
                     <select
-                      value={card.behaviorAction === 'EU' || card.behaviorAction === 'O ADVERSÁRIO' ? card.behaviorAction : 'EU'}
+                      value={sanitizedAction}
                       onChange={(e) => {
                         const actVal = e.target.value;
                         let hitVal = '';
                         if (actVal === 'EU') {
                           hitVal = 'JOGO DE NOVO';
                         } else {
-                          hitVal = 'MORRE';
+                          hitVal = isLight ? 'MORRE' : 'PERDE ANTÍPODA';
                         }
                         onCardChange?.({
                           behaviorAction: actVal,
                           behaviorHit: hitVal
                         });
                       }}
-                      className="border-[1.5px] border-black bg-amber-300 text-[10.5px] font-black text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none"
+                      className="border-[1.5px] border-black bg-white text-[10.5px] font-black text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[110px] focus:outline-none cursor-pointer"
                     >
                       <option value="EU">EU</option>
                       <option value="O ADVERSÁRIO">O ADVERSÁRIO</option>
                     </select>
                   ) : (
                     <span className="text-[10.5px] font-bold border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] block text-center uppercase text-black">
-                      {card.behaviorAction || 'ACTION'}
+                      {sanitizedAction}
                     </span>
                   )}
                 </div>
@@ -495,13 +542,13 @@ export default function BilowCardView({
                   {isEditing ? (
                     <div className="flex items-center gap-1">
                       <select
-                        value={card.behaviorHit || 'HIT'}
+                        value={sanitizedHit}
                         onChange={(e) => onCardChange?.({ behaviorHit: e.target.value })}
-                        className="border-[1.5px] border-black bg-white text-[9px] font-black text-black px-0.5 py-0.5 rounded leading-none h-[24px] min-w-[85px] max-w-[85px] focus:outline-none"
+                        className="border-[1.5px] border-black bg-white text-[9px] font-black text-black px-0.5 py-0.5 rounded leading-none h-[24px] min-w-[85px] max-w-[85px] focus:outline-none cursor-pointer"
                       >
-                        {card.behaviorAction === 'O ADVERSÁRIO' ? (
+                        {sanitizedAction === 'O ADVERSÁRIO' ? (
                           <>
-                            <option value="MORRE">MORRE</option>
+                            {isLight && <option value="MORRE">MORRE</option>}
                             <option value="PERDE ANTÍPODA">PERDE ANTÍPODA</option>
                             <option value="PERDE DEFESA EXTRA">PERDE DEFESA EXTRA</option>
                           </>
@@ -516,9 +563,8 @@ export default function BilowCardView({
                       <button
                         type="button"
                         onClick={() => {
-                          const isOponente = card.behaviorAction === 'O ADVERSÁRIO';
-                          const pool = isOponente 
-                            ? ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA']
+                          const pool = sanitizedAction === 'O ADVERSÁRIO'
+                            ? (isLight ? ['MORRE', 'PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'] : ['PERDE ANTÍPODA', 'PERDE DEFESA EXTRA'])
                             : ['JOGO DE NOVO', 'IMUNIDADE ANTÍPODA', 'ATACO DOBRADO'];
                           const val = pool[Math.floor(Math.random() * pool.length)];
                           onCardChange?.({ behaviorHit: val });
@@ -530,8 +576,8 @@ export default function BilowCardView({
                       </button>
                     </div>
                   ) : (
-                    <span className="text-[10px] font-black border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] max-w-[115px] block text-center leading-[1.1] truncate uppercase text-black" title={card.behaviorHit || 'HIT'}>
-                      {card.behaviorHit || 'HIT'}
+                    <span className="text-[10px] font-black border-[1.5px] border-black bg-white px-1 py-0.5 min-w-[110px] max-w-[115px] block text-center leading-[1.1] truncate uppercase text-black" title={sanitizedHit}>
+                      {sanitizedHit}
                     </span>
                   )}
                 </div>

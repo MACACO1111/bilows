@@ -47,6 +47,7 @@ export default function App() {
   const [twitterHandle, setTwitterHandle] = useState('NOME DO DESIGNER');
   const [exportCard, setExportCard] = useState<BilowCard | null>(null);
   const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
   // Copy success feedback state
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -197,6 +198,12 @@ export default function App() {
       }
       setDeleteConfirmCardId(null);
     }
+  };
+
+  const handleConfirmClearAll = () => {
+    saveDeck([]);
+    handleResetForm();
+    setShowClearAllConfirm(false);
   };
 
   const handleLoadCard = (card: BilowCard) => {
@@ -718,10 +725,16 @@ export default function App() {
                 >
                   EXPORTAR MEU BARALHO (.JSON)
                 </button>
-                <label className="px-3 py-1.5 border border-zinc-700 bg-zinc-900 text-[8.5px] text-zinc-300 hover:text-white hover:border-white uppercase font-bold cursor-pointer">
+                <label className="px-3 py-1.5 border border-zinc-700 bg-zinc-900 text-[8.5px] text-zinc-300 hover:text-white hover:border-white uppercase font-bold cursor-pointer mr-0">
                   IMPORTAR COLECIONADOR (.JSON)
                   <input type="file" onChange={handleImportDeck} accept=".json" className="hidden" />
                 </label>
+                <button
+                  onClick={() => setShowClearAllConfirm(true)}
+                  className="px-3 py-1.5 border border-red-700 bg-red-950/40 text-[8.5px] text-red-400 hover:bg-red-650 hover:text-white hover:border-white uppercase font-bold cursor-pointer transition-all flex items-center gap-1"
+                >
+                  EXCLUIR TUDO 🗑️
+                </button>
               </div>
             </div>
 
@@ -1282,6 +1295,36 @@ export default function App() {
                 className="flex-1 py-2 bg-red-950 hover:bg-red-900 border border-red-500 text-red-400 hover:text-white text-[10px] font-black uppercase rounded-lg cursor-pointer transition-colors"
               >
                 SIM, EXCLUIR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Confirmation Modal */}
+      {showClearAllConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/80">
+          <div className="bg-zinc-950 border-2 border-red-600 rounded-2xl max-w-sm w-full p-6 text-center shadow-[0_0_35px_rgba(220,38,38,0.4)] animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="font-extrabold text-red-500 text-lg tracking-wider mb-2 uppercase">
+              🚨 LIMPAR TODO O BARALHO?
+            </h3>
+            <p className="text-zinc-300 text-xs uppercase mb-6 leading-relaxed">
+              VOCÊ TEM CERTEZA ABSOLUTA DE QUE DESEJA EXCLUIR TODAS AS CARTAS DO SEU BARALHO DE UMA SÓ VEZ? ESTA AÇÃO É TOTALMENTE IRREVERSÍVEL!
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowClearAllConfirm(false)}
+                className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[10px] font-black uppercase rounded-lg border border-zinc-700 cursor-pointer transition-colors"
+              >
+                CANCELAR
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearAll}
+                className="flex-1 py-2 bg-red-950 hover:bg-red-900 border border-red-500 text-red-400 hover:text-white text-[10px] font-black uppercase rounded-lg cursor-pointer transition-colors"
+              >
+                SIM, EXCLUIR TUDO
               </button>
             </div>
           </div>
