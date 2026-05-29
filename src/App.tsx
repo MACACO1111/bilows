@@ -37,7 +37,7 @@ export default function App() {
   const [cardName, setCardName] = useState('IGNISAUR');
   const [cardEvoc, setCardEvoc] = useState('01');
   const [cardElemento, setCardElemento] = useState<'AG' | 'TE' | 'AR' | 'FO'>('FO');
-  const [cardPeso, setCardPeso] = useState('120');
+  const [cardPeso, setCardPeso] = useState('');
   const [drawingDataUrl, setDrawingDataUrl] = useState('');
   
   // Behaviors states
@@ -110,7 +110,7 @@ export default function App() {
     setCardName('CRIATURA_NOVA');
     setCardEvoc('01');
     setCardElemento('FO');
-    setCardPeso('120');
+    setCardPeso('');
     setBehaviorDado('DADO');
     setBehaviorAction('ACTION');
     setBehaviorHit('HIT');

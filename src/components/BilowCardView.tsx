@@ -478,12 +478,12 @@ export default function BilowCardView({
                           onChange={(e) => onCardChange?.({ behaviorDado: e.target.value })}
                           className="border-[1.5px] border-black bg-white text-[11px] font-bold text-black px-1 py-0.5 rounded leading-none text-center h-[24px] min-w-[76px] focus:outline-none cursor-pointer"
                         >
-                          <option value="1 font-bold">1</option>
-                          <option value="2 font-bold">2</option>
-                          <option value="3 font-bold">3</option>
-                          <option value="4 font-bold">4</option>
-                          <option value="5 font-bold">5</option>
-                          <option value="6 font-bold">6</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                          <option value="5">5</option>
+                          <option value="6">6</option>
                         </select>
                         <button
                           type="button"
