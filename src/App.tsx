@@ -20,7 +20,8 @@ import {
   Plus, 
   Copy, 
   Check,
-  Crown
+  Crown,
+  Grid
 } from 'lucide-react';
 
 const LOCAL_STORAGE_KEY = 'bilows_deck_collection_v3';
@@ -47,6 +48,8 @@ export default function App() {
   const [exportCard, setExportCard] = useState<BilowCard | null>(null);
   const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ active: boolean; current: number; total: number } | null>(null);
+  const [exportA4Cards, setExportA4Cards] = useState<BilowCard[] | null>(null);
 
   // Copy success feedback state
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -240,6 +243,58 @@ export default function App() {
     link.href = dataUri;
     link.download = 'baralho_bilows_export.json';
     link.click();
+  };
+
+  const handleExportDeckAsJpeg = async () => {
+    if (deck.length === 0) {
+      alert("SEU BARALHO ESTÁ VAZIO! ADICIONE ALGUMA CARTA PRIMEIRO.");
+      return;
+    }
+
+    // Dividir em páginas de 9 cartas para a folha A4
+    const chunks: BilowCard[][] = [];
+    for (let i = 0; i < deck.length; i += 9) {
+      chunks.push(deck.slice(i, i + 9));
+    }
+
+    setExportProgress({ active: true, current: 0, total: chunks.length });
+
+    try {
+      const { toJpeg } = await import('html-to-image');
+      
+      for (let i = 0; i < chunks.length; i++) {
+        setExportProgress({ active: true, current: i + 1, total: chunks.length });
+        
+        // Define as cartas da folha ativa para renderização
+        setExportA4Cards(chunks[i]);
+        // Aguarda renderização ideal na tela/sandbox off-screen
+        await new Promise(resolve => setTimeout(resolve, 600));
+        
+        const element = document.getElementById("offscreen-a4-sheet-export");
+        if (element) {
+          const dataUrl = await toJpeg(element, {
+            quality: 0.98,
+            backgroundColor: '#ffffff',
+            pixelRatio: 2.5 // Gera nitidez espetacular para impressão física (aproximadamente 1600x2300 pixels)
+          });
+          
+          if (dataUrl) {
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `baralho_bilows_folha_A4_${i + 1}.jpeg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao exportar baralho em JPEG (Folhas A4):", err);
+      alert("HOUVE UM ERRO AO EXPORTAR INTEGRALMENTE AS FOLHAS A4 DO BARALHO.");
+    } finally {
+      setExportA4Cards(null);
+      setExportProgress(null);
+    }
   };
 
   const handleDownloadSingleCard = async () => {
@@ -719,10 +774,18 @@ export default function App() {
               <span className="text-[8px] text-zinc-500 font-bold">ORGANIZADOR DE BARALHO INSTANTÂNEO</span>
               <div className="flex flex-wrap gap-2">
                 <button
+                  onClick={handleExportDeckAsJpeg}
+                  disabled={exportProgress !== null}
+                  className="px-3 py-1.5 border border-amber-600 bg-zinc-900 text-[8.5px] text-amber-400 hover:bg-amber-655 hover:text-white hover:border-white uppercase font-bold cursor-pointer transition-all flex items-center gap-1 disabled:opacity-50"
+                  type="button"
+                >
+                  EXPORTAR EM FOLHAS A4 (JPEG) 🖼️
+                </button>
+                <button
                   onClick={handleExportDeck}
                   className="px-3 py-1.5 border border-zinc-700 bg-zinc-900 text-[8.5px] text-zinc-300 hover:text-white hover:border-white uppercase font-bold cursor-pointer"
                 >
-                  EXPORTAR MEU BARALHO (.JSON)
+                  EXPORTAR COLECIONADOR (.JSON)
                 </button>
                 <label className="px-3 py-1.5 border border-zinc-700 bg-zinc-900 text-[8.5px] text-zinc-300 hover:text-white hover:border-white uppercase font-bold cursor-pointer mr-0">
                   IMPORTAR COLECIONADOR (.JSON)
@@ -1256,6 +1319,52 @@ export default function App() {
           </div>
         )}
 
+        {/* Off-screen A4 sheet export container to render 9 cards aligned onto a single high-res page */}
+        {exportA4Cards && (
+          <div 
+            style={{ 
+              position: 'fixed', 
+              top: '-15000px', 
+              left: '-15000px', 
+              width: '720px', 
+              backgroundColor: '#ffffff',
+              padding: '30px',
+              boxSizing: 'border-box',
+              zIndex: -9999
+            }}
+          >
+            <div id="offscreen-a4-sheet-export" className="bg-white p-3 rounded-none flex items-center justify-center" style={{ width: '660px' }}>
+              <div className="grid grid-cols-3 gap-x-2 gap-y-2 justify-center bg-white" style={{ width: '640px' }}>
+                {Array.from({ length: 9 }).map((_, index) => {
+                  const card = exportA4Cards[index];
+                  if (!card) {
+                    return (
+                      <div 
+                        key={`offscreen-empty-${index}`} 
+                        className="aspect-[63.5/88.9] border-2 border-dashed border-zinc-250 rounded-[12px] bg-[#fafafa] flex flex-col items-center justify-center text-zinc-350 font-bold gap-1"
+                        style={{ width: '206px', height: '304px' }}
+                      >
+                        <Grid className="w-5 h-5 opacity-25 text-zinc-400" />
+                        <span className="text-[7.5px] uppercase tracking-widest font-mono text-zinc-450">SLOT {index + 1}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={`offscreen-card-${card.id}-${index}`} className="relative bg-white" style={{ width: '206px', height: '304px', overflow: 'hidden' }}>
+                      <BilowCardView 
+                        card={card} 
+                        scale={206 / 420} 
+                        showCutGuides={true}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* FOOTER NO-PRINT (Fully Black) */}
@@ -1326,6 +1435,30 @@ export default function App() {
                 SIM, EXCLUIR TUDO
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* JPEG Export Progress Modal */}
+      {exportProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/85">
+          <div className="bg-zinc-950 border-2 border-amber-500 rounded-3xl max-w-sm w-full p-6 text-center shadow-[0_0_40px_rgba(245,158,11,0.3)] animate-in fade-in zoom-in-95 duration-200">
+            <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <h3 className="font-extrabold text-amber-500 text-lg tracking-wider mb-2 uppercase">
+              🖼️ EXPORTANDO EM JPEG (A4)
+            </h3>
+            <p className="text-zinc-300 text-[10px] uppercase mb-4 leading-relaxed font-semibold">
+              ORGANIZANDO CARTAS E GERANDO AS FOLHAS DE IMPRESSÃO A4 DO SEU BARALHO SEM ZIPAR. SEU NAVEGADOR IRÁ BAIXAR CADA FOLHA INDIVIDUALMENTE COMTENDO ATÉ 9 CARTAS.
+            </p>
+            <div className="w-full bg-zinc-900 rounded-full h-3 border border-zinc-700/60 p-0.5 overflow-hidden">
+              <div 
+                className="bg-amber-500 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
+                style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }}
+              ></div>
+            </div>
+            <p className="text-zinc-400 font-bold text-[11px] font-mono mt-3 uppercase">
+              FOLHA {exportProgress.current} DE {exportProgress.total} ({Math.round((exportProgress.current / exportProgress.total) * 100)}%)
+            </p>
           </div>
         </div>
       )}
