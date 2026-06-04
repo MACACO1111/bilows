@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BilowCard } from './types';
-import { DEFAULT_CARDS } from './data/defaultCards';
 import DrawingBoard from './components/DrawingBoard';
 import BilowCardView, { calculateVida, calculatePowerAtakMod, calculateDefesa, calculateAntipoda, calculateFraco } from './components/BilowCardView';
 import BattleSimulator from './components/BattleSimulator';
@@ -24,7 +23,7 @@ import {
   Crown
 } from 'lucide-react';
 
-const LOCAL_STORAGE_KEY = 'bilows_deck_collection_v2';
+const LOCAL_STORAGE_KEY = 'bilows_deck_collection_v3';
 
 export default function App() {
   const drawingBoardRef = React.useRef<any>(null);
@@ -65,17 +64,17 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setDeck(parsed);
         } else {
-          setDeck(DEFAULT_CARDS);
+          setDeck([]);
         }
       } catch (err) {
-        setDeck(DEFAULT_CARDS);
+        setDeck([]);
       }
     } else {
-      setDeck(DEFAULT_CARDS);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_CARDS));
+      setDeck([]);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([]));
     }
   }, []);
 
